@@ -1,6 +1,6 @@
 # EVA - Evolutionary Algorithm
 
-This C++ header-only library provides an implementation of an evolutionary algorithm for use cases in which genomes only provide a partial representation of individuals in the population and the generation of individuals from a genome is computationally expensive.
+This C++ header-only library provides an implementation of an evolutionary algorithm for use cases in which genomes only provide a partial representation of individuals in the population and the generation of individuals from a genome is computationally expensive. The implementation is multi-threaded and each new individual created is immediately added to the population, directly replacing the worst individual.
 
 ## Core Concepts - `Individual` and `Genome`
 
