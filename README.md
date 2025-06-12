@@ -25,7 +25,7 @@ The `EvolutionaryAlgorithm::Config` struct defines `std::function` members for s
   * `incubate`: A function that transforms a `Genome` into an `Individual`.
   * `evaluate`: A function responsible for assigning a `Fitness` value (represented as `std::vector<double>`) to an `Individual`.
   * `termination`: A function that defines the stopping condition for the evolutionary process.
-  * `monitor`: An optional callback function for observing the population or individuals during execution.
+  * `monitor`: An optional callback function for observing the population of individuals during execution.
 
 -----
 
