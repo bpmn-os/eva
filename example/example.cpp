@@ -91,7 +91,7 @@ int main(int argc, char** argv) {
         std::cout << "Previous best: ( " << stringify(bestPermutation->values) << ", " << stringify(bestFitness) << " ) - ";
       }
       std::cout << "New: ( " << stringify(permutation->values) << ", " << stringify(fitness) << " ) - ";
-      std::cout << "Thread: " << std::this_thread::get_id() << "\n";       
+      std::cout << "Thread: " << eva->getThreadIndex() << "\n";       
     }
   });
   

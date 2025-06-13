@@ -161,10 +161,10 @@ public:
     terminate = false;
     std::vector<std::jthread> workers;
 
-    for (unsigned int threadId = 0; threadId < config.threads; ++threadId) {
+    for (unsigned int index = 1; index <= config.threads; ++index) {
       workers.emplace_back(
-        [this,threadId](std::stop_token) {
-          runThread(threadId);
+        [this,index](std::stop_token) {
+          runThread(index);
         }
       );
     }
@@ -199,18 +199,21 @@ public:
     return population[index];
   }
   
-  const Config& getConfig() { return config; }
+  const Config& getConfig() const { return config; }
+  static size_t getThreadIndex() { return threadIndex; };
 protected:
   Config config;
   mutable std::mutex populationMutex;
   std::vector< std::pair< std::shared_ptr< const Individual >, Fitness> > population; ///< Population of individuals with their hierarchically ordered fitness
   std::set<size_t, Comparator> orderedIndices; ///< Fitness ordered set of population indices
   static thread_local std::mt19937 randomNumberGenerator;
+  static thread_local size_t threadIndex;
   std::atomic<bool> terminate;
 
 
-  void runThread(unsigned int threadId) {
-    randomNumberGenerator.seed( config.seed + threadId );
+  void runThread(unsigned int index) {
+    randomNumberGenerator.seed( config.seed + index );
+    threadIndex = index;
     do {
       if ( population.size() > 1 && randomProbability() < config.crossoverProbability   ) {
         auto parent1 = config.parentSelection( this );
@@ -246,6 +249,14 @@ requires (
   std::is_convertible_v<Individual,Genome>
 )
 thread_local std::mt19937 EvolutionaryAlgorithm<Individual, Genome>::randomNumberGenerator;
+
+template < typename Individual, typename Genome >
+requires (
+  std::movable<Individual> &&
+  std::movable<Genome> &&
+  std::is_convertible_v<Individual,Genome>
+)
+thread_local size_t EvolutionaryAlgorithm<Individual, Genome>::threadIndex = 0;
 
 } // end namespace EVA
 
