@@ -6,6 +6,7 @@
 #include "../include/mutator/randomSwap.h"
 #include "../include/incubator/constructor.h"
 #include "../include/evaluator/fitnessFunction.h"
+#include "../include/spawn/randomPermutation.h"
 
 #include <iostream>
 
@@ -65,19 +66,24 @@ int main(int argc, char** argv) {
   EVA::EvolutionaryAlgorithm< Permutation, std::vector<unsigned int> > eva({
     .minPopulationSize = 5,
     .maxPopulationSize = 20,
-    // use default implementations
-    .parentSelection = &EVA::rankSelection<Permutation, std::vector<unsigned int>>,
-    .alternativeParentSelection = &EVA::binaryTournamentSelection<Permutation, std::vector<unsigned int>>,
-    .crossover = &EVA::orderedCrossover<Permutation, std::vector<unsigned int>>,
-    .mutationSelection = &EVA::randomSelection<Permutation, std::vector<unsigned int>>,
-    .mutate = &EVA::randomSwap<Permutation, std::vector<unsigned int>>,
-    .incubate = &EVA::constructor<Permutation, std::vector<unsigned int>>,
-//    .evaluate = &EVA::fitnessFunction<Permutation, std::vector<unsigned int>>
-    // create lambdas
-    .evaluate = []( [[maybe_unused]] const EVA::EvolutionaryAlgorithm< Permutation, std::vector<unsigned int> >* eva, const std::shared_ptr< const Permutation >& permutation ) { 
-      return permutation->getFitness(); 
+    .threadConfig = {
+      // use default implementations
+      .spawn = EVA::randomPermutation<Permutation, std::vector<unsigned int>>(length),
+      .parentSelection = EVA::rankSelection<Permutation, std::vector<unsigned int>>(),
+      .alternativeParentSelection = EVA::binaryTournamentSelection<Permutation, std::vector<unsigned int>>(),
+      .crossover = EVA::orderedCrossover<Permutation, std::vector<unsigned int>>(),
+      .mutationSelection = EVA::randomSelection<Permutation, std::vector<unsigned int>>(),
+      .mutate = EVA::randomSwap<Permutation, std::vector<unsigned int>>(),
+      .incubate = EVA::constructor<Permutation, std::vector<unsigned int>>(),
+      .evaluate = EVA::fitnessFunction<Permutation, std::vector<unsigned int>>()
+/*
+      // create lambda
+      .evaluate = []( [[maybe_unused]] const EVA::EvolutionaryAlgorithm< Permutation, std::vector<unsigned int> >* eva, const std::shared_ptr< const Permutation >& permutation ) { 
+        return permutation->getFitness(); 
+      }
+*/
     },
-    // create lambdas using captures
+    // create lambda using captures
     .termination = [&counter,maxIterations]( [[maybe_unused]] const EVA::EvolutionaryAlgorithm< Permutation, std::vector<unsigned int> >* eva) {
       auto [bestPermutation, bestFitness] = eva->getBest();
       return ( bestFitness[0] > 1 - 1e-10 || counter >= maxIterations ); 
@@ -94,24 +100,6 @@ int main(int argc, char** argv) {
       std::cout << "Thread: " << eva->getThreadIndex() << "\n";       
     }
   });
-  
-  // create initial population
-  auto config = eva.getConfig();
-  for ( unsigned int i = 0; i < config.minPopulationSize; i++ ) {
-    // create random genome
-    std::vector<unsigned int> genome(length);
-    std::iota(genome.begin(), genome.end(), 1);
-    std::random_device rd;
-    std::mt19937 g(rd());
-    std::shuffle(genome.begin(), genome.end(), g);
-    
-    // incubate individual and determine fitness
-    auto individual = config.incubate( &eva, genome );
-    auto fitness = config.evaluate( &eva, individual );
-    
-    // add individual
-    eva.add( individual, fitness );
-  }
   
   // run evolutionary algorithm with given number of threads
   eva.run();

@@ -18,6 +18,7 @@ The library requires that `Individual` objects can be implicitly converted to `G
 
 The `EvolutionaryAlgorithm::Config` struct defines `std::function` members for specifying custom functions:
 
+  * `spawn`: A function that creates a new `Individual` with its `Fitness`.
   * `parentSelection`, `alternativeParentSelection`: Functions for selecting parent individuals for reproduction.
   * `crossover`: A function that combines two `Genome` objects to produce a new `Genome`.
   * `mutationSelection`: A function that selects an individual to be mutated.

@@ -5,6 +5,7 @@
 #include <utility>
 #include <concepts>
 #include <mutex>
+#include <shared_mutex>
 #include <thread>
 #include <random>
 #include <memory>
@@ -22,14 +23,11 @@ requires (
 )
 class EvolutionaryAlgorithm {
 public:
-  struct Config {
+  struct ThreadConfig {
     using EVA = EvolutionaryAlgorithm<Individual, Genome>;
-    unsigned int seed = std::random_device{}();
-    unsigned int threads = std::max(1u, std::thread::hardware_concurrency());
-    size_t minPopulationSize = 2;
-    size_t maxPopulationSize = 100;
     double crossoverProbability = 0.8;
     double mutationProbability = 0.2;
+    std::function<std::pair< std::shared_ptr< const Individual >, Fitness >(const EVA*)> spawn = nullptr;
     std::function<std::shared_ptr< const Individual >(const EVA*)> parentSelection = nullptr;
     std::function<std::shared_ptr< const Individual >(const EVA*)> alternativeParentSelection = nullptr;
     std::function<Genome(const EVA*, const Genome&, const Genome&)> crossover = nullptr;
@@ -37,10 +35,18 @@ public:
     std::function<Genome(const EVA*, const Genome&)> mutate = nullptr;
     std::function<std::shared_ptr< const Individual >(const EVA*, const Genome&)> incubate = nullptr;
     std::function<Fitness(const EVA*, const std::shared_ptr< const Individual >&)> evaluate = nullptr;
+  };
+
+  struct Config {
+    using EVA = EvolutionaryAlgorithm<Individual, Genome>;
+    const unsigned int seed = std::random_device{}();
+    const unsigned int threads = std::max(1u, std::thread::hardware_concurrency());
+    size_t minPopulationSize = 10;
+    size_t maxPopulationSize = 100;
+    ThreadConfig threadConfig = {};
     std::function<bool(const EVA*)> termination = nullptr;
     std::function<void(const EVA*, const std::shared_ptr< const Individual >&, const Fitness&)> monitor = nullptr;
   };
-  static Config default_config() { return {}; } // Work around for compiler bug see: https://stackoverflow.com/questions/53408962/try-to-understand-compiler-error-message-default-member-initializer-required-be/75691051#75691051
 
   struct Comparator {
     const std::vector< std::pair< std::shared_ptr< const Individual >, Fitness > >* populationPtr;
@@ -57,44 +63,49 @@ public:
     }
   };
 
-  EvolutionaryAlgorithm(Config config = default_config())
-    : config(config)
-    , orderedIndices(Comparator(&population))
+  EvolutionaryAlgorithm(Config config)
+    : orderedIndices(Comparator(&population))
   {
-    if ( config.parentSelection && !config.crossover ) {
+    if ( config.minPopulationSize < 2 ) {
+      throw std::logic_error("EvolutionaryAlgorithm: minimal population size must be at least 2");
+    }
+    if ( config.maxPopulationSize < config.minPopulationSize ) {
+      throw std::logic_error("EvolutionaryAlgorithm: maximal population size must be at least minimal population");
+    }
+    if ( config.threadConfig.parentSelection && !config.threadConfig.crossover ) {
       throw std::logic_error("EvolutionaryAlgorithm: crossover operator missing");
     }
-    if ( !config.parentSelection && config.crossover ) {
+    if ( !config.threadConfig.parentSelection && config.threadConfig.crossover ) {
       throw std::logic_error("EvolutionaryAlgorithm: parent selector missing");
     }
-    if ( !config.alternativeParentSelection ) {
-      config.alternativeParentSelection = config.parentSelection;
+    if ( !config.threadConfig.alternativeParentSelection ) {
+      config.threadConfig.alternativeParentSelection = config.threadConfig.parentSelection;
     }
-    if ( config.mutationSelection && !config.mutate ) {
+    if ( config.threadConfig.mutationSelection && !config.threadConfig.mutate ) {
       throw std::logic_error("EvolutionaryAlgorithm: mutator missing");
     }
-    if ( !config.mutationSelection && config.mutate ) {
+    if ( !config.threadConfig.mutationSelection && config.threadConfig.mutate ) {
       throw std::logic_error("EvolutionaryAlgorithm: mutation selector missing");
     }
-    if ( !config.crossover && !config.mutate ) {
+    if ( !config.threadConfig.crossover && !config.threadConfig.mutate ) {
       throw std::logic_error("EvolutionaryAlgorithm: crossover or mutator needed");
     }
-    if ( !config.crossover ) {
-      config.crossoverProbability = 0.0;
-      config.mutationProbability = 1.0;
+    if ( !config.threadConfig.crossover ) {
+      config.threadConfig.crossoverProbability = 0.0;
+      config.threadConfig.mutationProbability = 1.0;
     }
-    if ( !config.mutate ) {
-      config.crossoverProbability = 1.0;
-      config.mutationProbability = 0.0;
+    if ( !config.threadConfig.mutate ) {
+      config.threadConfig.crossoverProbability = 1.0;
+      config.threadConfig.mutationProbability = 0.0;
     }    
-    if ( std::abs(config.crossoverProbability + config.mutationProbability - 1.0) > 1e-10 ) {
+    if ( std::abs(config.threadConfig.crossoverProbability + config.threadConfig.mutationProbability - 1.0) > 1e-10 ) {
       throw std::logic_error("EvolutionaryAlgorithm: crossover and mutation probabilities must add up to 1");
     }
     
-    if ( !config.incubate ) {
+    if ( !config.threadConfig.incubate ) {
       throw std::logic_error("EvolutionaryAlgorithm: incubator missing");
     }
-    if ( !config.evaluate ) {
+    if ( !config.threadConfig.evaluate ) {
       throw std::logic_error("EvolutionaryAlgorithm: evaluator missing");
     }
     if ( !config.termination ) {
@@ -103,22 +114,32 @@ public:
     if ( config.minPopulationSize < 1  ) {
       throw std::logic_error("EvolutionaryAlgorithm: minimum population size must be at least 1");
     }
+    
+    threadConfigMutex.resize(config.threads);
+    threadConfigs.resize(config.threads);
+    for (size_t i = 0; i < config.threads; ++i) {
+      threadConfigMutex[i] = std::make_unique< std::shared_mutex >();
+      threadConfigs[i] = std::make_shared<ThreadConfig>(config.threadConfig);
+    }
 
+    globalConfig = std::make_shared<Config>(std::move(config));
+    
   };
   
   /// Adds an evaluated individual to the population without exceeding the maximum population size
   void add( std::shared_ptr< const Individual > individual, Fitness fitness ) {
     auto lock = acquireLock();
     
-    if ( config.monitor ) {
+    auto config = getConfig();
+    if ( config->monitor ) {
       // allows to inspect added individual before it is inserted
       // a lock on the population has already been acquired
       // population still contains the individual that may be replaced
       // use getWorst(true) to access this individual
-      config.monitor( this, individual, fitness );
+      config->monitor( this, individual, fitness );
     }
     
-    if ( population.size() < config.maxPopulationSize ) {
+    if ( population.size() < config->maxPopulationSize ) {
       // add individual to population
       size_t index = population.size();
       population.emplace_back(std::move(individual), std::move(fitness));
@@ -154,14 +175,11 @@ public:
   }
 
   void run() {
-    if ( population.size() < config.minPopulationSize ) {
-      throw std::logic_error("EvolutionaryAlgorithm: population too small");
-    }
-  
+    auto config = getConfig(); 
     terminate = false;
     std::vector<std::jthread> workers;
 
-    for (unsigned int index = 1; index <= config.threads; ++index) {
+    for (unsigned int index = 1; index <= config->threads; ++index) {
       workers.emplace_back(
         [this,index](std::stop_token) {
           runThread(index);
@@ -199,11 +217,46 @@ public:
     return population[index];
   }
   
-  const Config& getConfig() const { return config; }
+  std::shared_ptr<Config> getConfig() const { 
+    std::shared_lock lock(globalConfigMutex);
+    return globalConfig; 
+  }
+  void setConfig(Config config) { 
+    std::unique_lock lock(globalConfigMutex);
+    globalConfig = std::make_shared<Config>(std::move(config));
+  }
+
+  std::shared_ptr<ThreadConfig> getThreadConfig(size_t index = getThreadIndex()) const { 
+    if ( index > 0 ) {
+      std::shared_lock lock(*threadConfigMutex[index-1]);
+      return threadConfigs[index-1];
+    }
+    else {
+      std::shared_lock lock(globalConfigMutex);
+      return std::make_shared<ThreadConfig>(globalConfig->threadConfig);
+    }
+  }
+
+  void setThreadConfig(ThreadConfig config, size_t index = getThreadIndex()) {
+    if (index > 0) {
+      std::unique_lock lock(*threadConfigMutex[index-1]);
+      threadConfigs[index - 1] = std::make_shared<ThreadConfig>(std::move(config));
+    }
+    else {
+      std::unique_lock lock(globalConfigMutex);
+      auto global = std::make_shared<Config>(*globalConfig);  // copy
+      global->threadConfig = std::move(config);
+      globalConfig = std::move(global);
+    }
+  }
+
   static size_t getThreadIndex() { return threadIndex; };
 protected:
-  Config config;
+  std::shared_ptr<Config> globalConfig;
+  std::vector< std::shared_ptr<ThreadConfig> > threadConfigs;
   mutable std::mutex populationMutex;
+  mutable std::shared_mutex globalConfigMutex;
+  mutable std::vector< std::unique_ptr< std::shared_mutex > > threadConfigMutex;
   std::vector< std::pair< std::shared_ptr< const Individual >, Fitness> > population; ///< Population of individuals with their hierarchically ordered fitness
   std::set<size_t, Comparator> orderedIndices; ///< Fitness ordered set of population indices
   static thread_local std::mt19937 randomNumberGenerator;
@@ -212,30 +265,41 @@ protected:
 
 
   void runThread(unsigned int index) {
-    randomNumberGenerator.seed( config.seed + index );
+    auto config = getConfig();
+    randomNumberGenerator.seed( config->seed + index );
     threadIndex = index;
+    
+    while ( population.size() < config->minPopulationSize ) {
+      auto threadConfig = getThreadConfig();
+      // spawn individual
+      auto [ individual, fitness ] = config->threadConfig.spawn( this );
+      // add individual
+      add( individual, fitness );
+    }
+    
     do {
-      if ( population.size() > 1 && randomProbability() < config.crossoverProbability   ) {
-        auto parent1 = config.parentSelection( this );
-        auto parent2 = config.alternativeParentSelection( this );
+      auto threadConfig = getThreadConfig();
+      if ( randomProbability() < threadConfig->crossoverProbability   ) {
+        auto parent1 = threadConfig->parentSelection( this );
+        auto parent2 = threadConfig->alternativeParentSelection( this );
         while ( parent1.get() == parent2.get() ) {
-          parent2 = config.alternativeParentSelection( this );
+          parent2 = threadConfig->alternativeParentSelection( this );
         }
         auto& genome1 = *parent1.get();
         auto& genome2 = *parent2.get();
-        auto offspring = config.incubate( this, config.crossover( this, genome1, genome2 ) );
-        auto fitness = config.evaluate( this, offspring );
+        auto offspring = threadConfig->incubate( this, threadConfig->crossover( this, genome1, genome2 ) );
+        auto fitness = threadConfig->evaluate( this, offspring );
         add( offspring, fitness );
       }
       else {
-        auto individual = config.mutationSelection( this );
+        auto individual = threadConfig->mutationSelection( this );
         auto& genome = *individual.get();
-        auto mutant = config.incubate( this, config.mutate( this, genome ) );
-        auto fitness = config.evaluate( this, mutant );
+        auto mutant = threadConfig->incubate( this, threadConfig->mutate( this, genome ) );
+        auto fitness = threadConfig->evaluate( this, mutant );
         add( mutant, fitness );
       }
       
-      if ( config.termination( this ) ) {
+      if ( config->termination( this ) ) {
         terminate = true;
       }
     } while ( !terminate );
