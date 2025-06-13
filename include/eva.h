@@ -237,7 +237,7 @@ public:
     }
   }
 
-  void setThreadConfig(ThreadConfig config, size_t index = getThreadIndex()) {
+  void setThreadConfig(size_t index, ThreadConfig config) {
     if (index > 0) {
       std::unique_lock lock(*threadConfigMutex[index-1]);
       threadConfigs[index - 1] = std::make_shared<ThreadConfig>(std::move(config));
@@ -248,6 +248,9 @@ public:
       global->threadConfig = std::move(config);
       globalConfig = std::move(global);
     }
+  }
+  void setThreadConfig(ThreadConfig config) {
+    setThreadConfig(getThreadIndex(), std::move(config));
   }
 
   static size_t getThreadIndex() { return threadIndex; };
@@ -272,7 +275,7 @@ protected:
     while ( population.size() < config->minPopulationSize ) {
       auto threadConfig = getThreadConfig();
       // spawn individual
-      auto [ individual, fitness ] = config->threadConfig.spawn( this );
+      auto [ individual, fitness ] = threadConfig->spawn( this );
       // add individual
       add( individual, fitness );
     }
