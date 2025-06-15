@@ -18,7 +18,7 @@ requires (
   (std::ranges::random_access_range<Genome> || has_push_back<Genome, typename Genome::value_type>)
 )
 std::function<std::pair< std::shared_ptr< const Individual >, Fitness >(const EvolutionaryAlgorithm<Individual, Genome>*)> 
-randomPermutation(unsigned int length) {
+randomPermutation(size_t length) {
   return [length](const EvolutionaryAlgorithm<Individual, Genome>* eva) {
     std::vector<typename Genome::value_type> permutation(length);
     std::iota(permutation.begin(), permutation.end(), 1);
