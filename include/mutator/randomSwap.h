@@ -29,7 +29,14 @@ std::function<Genome(const EvolutionaryAlgorithm<Individual,Genome>*, const Geno
       j = eva->randomIndex( size );
     }
 
-    std::ranges::swap(mutant[i], mutant[j]);
+    if constexpr (std::ranges::random_access_range<Genome>) {
+      std::ranges::swap(mutant[i], mutant[j]);
+    }
+    else {
+      auto it1 = std::ranges::next(mutant.begin(), i);
+      auto it2 = std::ranges::next(mutant.begin(), j);
+      std::ranges::swap(*it1,*it2);
+    }
 
     return mutant;
   };
