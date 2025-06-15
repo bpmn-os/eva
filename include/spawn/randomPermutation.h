@@ -3,19 +3,18 @@
 #include "../eva.h"
 #include <random>
 #include <numeric>
+#include <ranges>
 
 namespace EVA {
-
-template<typename T, typename V>
-concept has_push_back = requires(T t, V v) {
-  { t.push_back(v) };
-};
 
 template <typename Individual, typename Genome = Individual>
 requires (
   std::is_integral_v<typename Genome::value_type> &&
   std::ranges::range<Genome> &&
-  (std::ranges::random_access_range<Genome> || has_push_back<Genome, typename Genome::value_type>)
+  (
+    std::ranges::random_access_range<Genome> || 
+    requires(Genome genome, typename Genome::value_type value) { { genome.push_back(value) }; } 
+  )
 )
 std::function<std::pair< std::shared_ptr< const Individual >, Fitness >(const EvolutionaryAlgorithm<Individual, Genome>*)> 
 randomPermutation(size_t length) {
@@ -29,7 +28,7 @@ randomPermutation(size_t length) {
     if constexpr (std::ranges::random_access_range<Genome>) {
       genome = Genome(permutation.begin(), permutation.end());
     } 
-    else /*if (has_push_back<Genome, typename Genome::value_type>)*/ {
+    else {
       for (auto& v : permutation) {
         genome.push_back(v);
       }
