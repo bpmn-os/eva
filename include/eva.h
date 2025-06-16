@@ -39,16 +39,20 @@ public:
 
   struct Config {
     using EVA = EvolutionaryAlgorithm<Individual, Genome>;
-    const unsigned int seed = std::random_device{}();
-    const unsigned int threads = std::max(1u, std::thread::hardware_concurrency());
-    size_t minPopulationSize = 10;
-    size_t maxPopulationSize = 100;
-    ThreadConfig threadConfig = {};
-    std::function<bool(const EVA*)> termination = nullptr;
-    std::function<void(const EVA*, const std::shared_ptr< const Individual >&, const Fitness&)> monitor = nullptr;
+    const unsigned int seed = std::random_device{}(); /// Seed to initialise the random number generators
+    const unsigned int threads = std::max(1u, std::thread::hardware_concurrency()); /// Number of threads to be used
+    size_t minPopulationSize = 10; /// Minimum number of individuals spawned before starting evolutionary process
+    size_t maxPopulationSize = 100; /// Maximum number of individuals in the population
+    unsigned int maxComputationTime = std::numeric_limits<unsigned int>::max();  /// Time limit in seconds
+    unsigned int maxSolutionCount = std::numeric_limits<unsigned int>::max();  /// Maximum number of solutions to be generated before termination 
+    unsigned int maxNonImprovingSolutionCount = std::numeric_limits<unsigned int>::max(); /// Maximum number of solutions without improvement to be generated before termination 
+    ThreadConfig threadConfig = {}; /// Default configuration for the threads 
+    std::function<bool(const EVA*)> termination = nullptr; /// Custom termination function
+    std::function<void(const EVA*, const std::shared_ptr< const Individual >&, const Fitness&)> monitor = nullptr; /// Callback allowing to monitor the progress of the algorithm (note: the population is locked while the callback is executed)
   };
 
-  struct Comparator {
+   /// Comparator ordering elements with higher fitness before elements with lower 
+   struct Comparator {
     const std::vector< std::pair< std::shared_ptr< const Individual >, Fitness > >* populationPtr;
 
     Comparator(const std::vector< std::pair< std::shared_ptr< const Individual >, Fitness > >* populationPtr)
@@ -66,8 +70,8 @@ public:
   EvolutionaryAlgorithm(Config config)
     : orderedIndices(Comparator(&population))
   {
-    if ( config.minPopulationSize < 2 ) {
-      throw std::logic_error("EvolutionaryAlgorithm: minimal population size must be at least 2");
+    if ( config.minPopulationSize < 1 ) {
+      throw std::logic_error("EvolutionaryAlgorithm: minimal population size must be at least 1");
     }
     if ( config.maxPopulationSize < config.minPopulationSize ) {
       throw std::logic_error("EvolutionaryAlgorithm: maximal population size must be at least minimal population");
@@ -108,12 +112,6 @@ public:
     if ( !config.threadConfig.evaluate ) {
       throw std::logic_error("EvolutionaryAlgorithm: evaluator missing");
     }
-    if ( !config.termination ) {
-      throw std::logic_error("EvolutionaryAlgorithm: termination condition missing");
-    }
-    if ( config.minPopulationSize < 1  ) {
-      throw std::logic_error("EvolutionaryAlgorithm: minimum population size must be at least 1");
-    }
     
     threadConfigMutex.resize(config.threads);
     threadConfigs.resize(config.threads);
@@ -125,11 +123,18 @@ public:
     globalConfig = std::make_shared<Config>(std::move(config));
     
   };
-  
+
   /// Adds an evaluated individual to the population without exceeding the maximum population size
   void add( std::shared_ptr< const Individual > individual, Fitness fitness ) {
     auto lock = acquireLock();
-    
+    solutionCount++;
+    if ( fitness > getBest(true).second ) {
+      nonImprovingSolutionCount = 0;
+    }
+    else {
+      nonImprovingSolutionCount++;
+    }
+        
     auto config = getConfig();
     if ( config->monitor ) {
       // allows to inspect added individual before it is inserted
@@ -164,18 +169,26 @@ public:
     return std::uniform_real_distribution<double>(0, 1)(randomNumberGenerator);
   }
   
-  /// Returns population of individuals with their hierarchically ordered 
+  /// Returns population of individuals with their fitness
   [[nodiscard]] const std::vector< std::pair< std::shared_ptr< const Individual >, Fitness > >& getPopulation() const {  
     return population;
   }
   
-  /// Returns fitness ordered set of population indices
+  /// Returns a set of population indices, ordered such that individuals with higher fitness appear before those with lower fitness
   [[nodiscard]] const std::set<size_t, Comparator>& getOrderedIndices() const {
     return orderedIndices;
   }
 
   void run() {
     auto config = getConfig(); 
+    solutionCount = 0;
+    nonImprovingSolutionCount = 0;
+    if ( config->maxComputationTime == std::numeric_limits<unsigned int>::max() ) {
+      terminationTime = std::chrono::time_point<std::chrono::system_clock>::max();
+    }
+    else {
+      terminationTime = std::chrono::system_clock::now()  + std::chrono::seconds(config->maxComputationTime);;
+    }
     terminate = false;
     std::vector<std::jthread> workers;
 
@@ -254,6 +267,8 @@ public:
   }
 
   static size_t getThreadIndex() { return threadIndex; };
+  unsigned int getSolutionCount() const { return solutionCount; };
+  unsigned int getNonImprovingSolutionCount() const { return nonImprovingSolutionCount; };
 protected:
   std::shared_ptr<Config> globalConfig;
   std::vector< std::shared_ptr<ThreadConfig> > threadConfigs;
@@ -264,8 +279,10 @@ protected:
   std::set<size_t, Comparator> orderedIndices; ///< Fitness ordered set of population indices
   static thread_local std::mt19937 randomNumberGenerator;
   static thread_local size_t threadIndex;
+  std::atomic<unsigned int> solutionCount;
+  std::atomic<unsigned int> nonImprovingSolutionCount;
+  std::chrono::time_point<std::chrono::system_clock> terminationTime;
   std::atomic<bool> terminate;
-
 
   void runThread(unsigned int index) {
     auto config = getConfig();
@@ -282,7 +299,8 @@ protected:
     
     do {
       auto threadConfig = getThreadConfig();
-      if ( randomProbability() < threadConfig->crossoverProbability   ) {
+      Fitness fitness;
+      if ( population.size() >= 2 && randomProbability() < threadConfig->crossoverProbability   ) {
         auto parent1 = threadConfig->parentSelection( this );
         auto parent2 = threadConfig->alternativeParentSelection( this );
         while ( parent1.get() == parent2.get() ) {
@@ -291,18 +309,23 @@ protected:
         auto& genome1 = *parent1.get();
         auto& genome2 = *parent2.get();
         auto offspring = threadConfig->incubate( this, threadConfig->crossover( this, genome1, genome2 ) );
-        auto fitness = threadConfig->evaluate( this, offspring );
+        fitness = threadConfig->evaluate( this, offspring );
         add( offspring, fitness );
       }
       else {
         auto individual = threadConfig->mutationSelection( this );
         auto& genome = *individual.get();
         auto mutant = threadConfig->incubate( this, threadConfig->mutate( this, genome ) );
-        auto fitness = threadConfig->evaluate( this, mutant );
+        fitness = threadConfig->evaluate( this, mutant );
         add( mutant, fitness );
       }
-      
-      if ( config->termination( this ) ) {
+            
+      if (
+        solutionCount >= config->maxSolutionCount ||
+        nonImprovingSolutionCount >= config->maxNonImprovingSolutionCount ||
+        std::chrono::system_clock::now() >= terminationTime ||
+        ( config->termination && config->termination( this ) )
+      ) {
         terminate = true;
       }
     } while ( !terminate );

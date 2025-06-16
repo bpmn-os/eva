@@ -58,14 +58,14 @@ int main(int argc, char** argv) {
   std::cout << prompt;
   std::cin >> length;
   std::cout << std::format("Using permutation length: {}\n", length);
-  
-  std::atomic<unsigned int> counter = 0;
-  unsigned int maxIterations = 100;
-  
+    
   // Create instance of evolutionary algorithm with inline configuration
   EVA::EvolutionaryAlgorithm< Permutation, std::vector<unsigned int> > eva({
     .minPopulationSize = 5,
-    .maxPopulationSize = 20,
+    .maxPopulationSize = 100,
+    .maxComputationTime = 60,
+    .maxSolutionCount = 100000,
+    .maxNonImprovingSolutionCount = 1000,
     .threadConfig = {
       // use default implementations
       .spawn = EVA::randomPermutation<Permutation, std::vector<unsigned int>>(length),
@@ -83,15 +83,16 @@ int main(int argc, char** argv) {
       }
 */
     },
-    // create lambda using captures
-    .termination = [&counter,maxIterations]( [[maybe_unused]] const EVA::EvolutionaryAlgorithm< Permutation, std::vector<unsigned int> >* eva) {
+    // create lambda
+    .termination = []( [[maybe_unused]] const EVA::EvolutionaryAlgorithm< Permutation, std::vector<unsigned int> >* eva) {
       auto [bestPermutation, bestFitness] = eva->getBest();
-      return ( bestFitness[0] > 1 - 1e-10 || counter >= maxIterations ); 
+      // return true if best permutation is perfectly ordered
+      return ( bestFitness[0] > 1 - 1e-10 ); 
     },
-    // create lambda using captures
-    .monitor = [&counter]( [[maybe_unused]] const EVA::EvolutionaryAlgorithm< Permutation, std::vector<unsigned int> >* eva, const std::shared_ptr< const Permutation >& permutation, const EVA::Fitness& fitness) {
-      counter++;
-      std::cout << counter << ". ";       
+    // create lambda
+    .monitor = []( [[maybe_unused]] const EVA::EvolutionaryAlgorithm< Permutation, std::vector<unsigned int> >* eva, const std::shared_ptr< const Permutation >& permutation, const EVA::Fitness& fitness) {
+      std::cout << eva->getSolutionCount() << ". ";       
+      std::cout << "(" << eva->getNonImprovingSolutionCount() << ") ";       
       auto [bestPermutation, bestFitness] = eva->getBest(true);
       if ( bestPermutation ) {
         std::cout << "Previous best: ( " << stringify(bestPermutation->values) << ", " << stringify(bestFitness) << " ) - ";
