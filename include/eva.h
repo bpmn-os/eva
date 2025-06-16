@@ -39,8 +39,8 @@ public:
 
   struct Config {
     using EVA = EvolutionaryAlgorithm<Individual, Genome>;
-    const unsigned int seed = std::random_device{}(); /// Seed to initialise the random number generators
-    const unsigned int threads = std::max(1u, std::thread::hardware_concurrency()); /// Number of threads to be used
+    unsigned int seed = std::random_device{}(); /// Seed to initialise the random number generators
+    unsigned int threads = std::max(1u, std::thread::hardware_concurrency()); /// Number of threads to be used
     size_t minPopulationSize = 10; /// Minimum number of individuals spawned before starting evolutionary process
     size_t maxPopulationSize = 100; /// Maximum number of individuals in the population
     unsigned int maxComputationTime = std::numeric_limits<unsigned int>::max();  /// Time limit in seconds
