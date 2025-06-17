@@ -13,8 +13,9 @@ template < typename Individual, typename Genome = Individual >
 requires (
   std::ranges::range<Genome>
 )
-std::function<Genome(const EvolutionaryAlgorithm<Individual,Genome>*, const Genome&)> randomSwap() {
-  return []( const EvolutionaryAlgorithm<Individual,Genome>* eva, const Genome& genome ) {
+std::function<Genome(const EvolutionaryAlgorithm<Individual,Genome>*, const std::vector< std::shared_ptr< const Individual > >&)> randomSwap() {
+  return []( const EvolutionaryAlgorithm<Individual,Genome>* eva, const std::vector< std::shared_ptr< const Individual > >& individuals ) {
+    const Genome& genome = *individuals.begin()->get();
     auto size = genome.size();
 
     if (size < 2) {

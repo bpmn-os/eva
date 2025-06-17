@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <ranges>
 
+#include <iostream>
+
 namespace EVA {
 
 template < typename Individual, typename Genome = Individual >
@@ -18,11 +20,15 @@ requires (
     requires(Genome genome, typename Genome::value_type value) { { genome.push_back(value) }; } 
   )
 )
-std::function<Genome(const EvolutionaryAlgorithm<Individual,Genome>*, const Genome&, const Genome&)> orderedCrossover() {
-  return []( const EvolutionaryAlgorithm<Individual,Genome>* eva, const Genome& parent1, const Genome& parent2 ) {
+std::function<Genome(const EvolutionaryAlgorithm<Individual,Genome>*, const std::vector< std::shared_ptr< const Individual > >&)> orderedCrossover() {
+  return []( const EvolutionaryAlgorithm<Individual,Genome>* eva, const std::vector< std::shared_ptr< const Individual > >& individuals ) {
+    const Genome& parent1 = *individuals.begin()->get();
+    const Genome& parent2 = *individuals.rbegin()->get();
     auto size = parent1.size();
 
     if ( parent2.size() != size ) {
+    auto lock = eva->acquireLock();
+std::cerr << "Error: " << individuals.size() << ": " << parent2.size() << " != " <<  size <<std::endl;
       throw std::logic_error("orderedCrossover: parents must have the same length");
     }
     if ( size < 2 ) {

@@ -10,7 +10,6 @@ namespace EVA {
 template < typename Individual, typename Genome = Individual >
 std::function<std::shared_ptr< const Individual >(const EvolutionaryAlgorithm<Individual,Genome>*)> rankSelection() {
   return []( const EvolutionaryAlgorithm<Individual,Genome>* eva ) {
-    auto lock = eva->acquireLock();
     auto& population = eva->getPopulation();
     auto& orderedIndices = eva->getOrderedIndices();
     const size_t n = population.size();

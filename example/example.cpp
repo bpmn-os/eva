@@ -15,9 +15,10 @@
 #include <random>
 #include <ranges>
 
+using Values = std::vector<unsigned int>;
 /// Permutation class representing individuals in the population
 struct Permutation {
-  std::vector<unsigned int> values; /// The genome
+  Values values; /// The genome
   /// Determines a fitness value between 0 and 1 (optimal).
   [[nodiscard]] EVA::Fitness getFitness() const {
     if ( values.empty() ) throw std::logic_error("Cannot evaluate permutation");
@@ -32,9 +33,9 @@ struct Permutation {
   };
   
   // Construct from const std::vector<unsigned int>
-  Permutation( std::vector<unsigned int> values ) : values(std::move(values)) {};
+  Permutation( Values values ) : values(std::move(values)) {};
   // Cast to const std::vector<unsigned int>&
-  operator const std::vector<unsigned int>&() const {
+  operator const Values&() const {
     return values;
   }
 };
@@ -60,7 +61,8 @@ int main(int argc, char** argv) {
   std::cout << std::format("Using permutation length: {}\n", length);
     
   // Create instance of evolutionary algorithm with inline configuration
-  EVA::EvolutionaryAlgorithm< Permutation, std::vector<unsigned int> > eva({
+  EVA::EvolutionaryAlgorithm< Permutation, Values > eva({
+    .threads = 8,
     .minPopulationSize = 5,
     .maxPopulationSize = 100,
     .maxComputationTime = 60,
@@ -68,29 +70,28 @@ int main(int argc, char** argv) {
     .maxNonImprovingSolutionCount = 1000,
     .threadConfig = {
       // use default implementations
-      .spawn = EVA::randomPermutation<Permutation, std::vector<unsigned int>>(length),
-      .parentSelection = EVA::rankSelection<Permutation, std::vector<unsigned int>>(),
-      .alternativeParentSelection = EVA::binaryTournamentSelection<Permutation, std::vector<unsigned int>>(),
-      .crossover = EVA::orderedCrossover<Permutation, std::vector<unsigned int>>(),
-      .mutationSelection = EVA::randomSelection<Permutation, std::vector<unsigned int>>(),
-      .mutate = EVA::randomSwap<Permutation, std::vector<unsigned int>>(),
-      .incubate = EVA::constructor<Permutation, std::vector<unsigned int>>(),
-      .evaluate = EVA::fitnessFunction<Permutation, std::vector<unsigned int>>()
+      .spawn = EVA::randomPermutation<Permutation, Values>(length),
+      .reproduction = {
+        { EVA::binaryTournamentSelection<Permutation, Values>(), 2, EVA::orderedCrossover<Permutation, Values>(), 1.0 },
+        { EVA::randomSelection<Permutation, Values>(), 1, EVA::randomSwap<Permutation, Values>(), 1.0 }
+      },
+      .incubate = EVA::constructor<Permutation, Values>(),
+      .evaluate = EVA::fitnessFunction<Permutation, Values>()
 /*
       // create lambda
-      .evaluate = []( [[maybe_unused]] const EVA::EvolutionaryAlgorithm< Permutation, std::vector<unsigned int> >* eva, const std::shared_ptr< const Permutation >& permutation ) { 
+      .evaluate = []( [[maybe_unused]] const EVA::EvolutionaryAlgorithm< Permutation, Values >* eva, const std::shared_ptr< const Permutation >& permutation ) { 
         return permutation->getFitness(); 
       }
 */
     },
     // create lambda
-    .termination = []( [[maybe_unused]] const EVA::EvolutionaryAlgorithm< Permutation, std::vector<unsigned int> >* eva) {
+    .termination = []( [[maybe_unused]] const EVA::EvolutionaryAlgorithm< Permutation, Values >* eva) {
       auto [bestPermutation, bestFitness] = eva->getBest();
       // return true if best permutation is perfectly ordered
       return ( bestFitness[0] > 1 - 1e-10 ); 
     },
     // create lambda
-    .monitor = []( [[maybe_unused]] const EVA::EvolutionaryAlgorithm< Permutation, std::vector<unsigned int> >* eva, const std::shared_ptr< const Permutation >& permutation, const EVA::Fitness& fitness) {
+    .monitor = []( [[maybe_unused]] const EVA::EvolutionaryAlgorithm< Permutation, Values >* eva, const std::shared_ptr< const Permutation >& permutation, const EVA::Fitness& fitness) {
       std::cout << eva->getSolutionCount() << ". ";       
       std::cout << "(" << eva->getNonImprovingSolutionCount() << ") ";       
       auto [bestPermutation, bestFitness] = eva->getBest(true);
@@ -98,7 +99,8 @@ int main(int argc, char** argv) {
         std::cout << "Previous best: ( " << stringify(bestPermutation->values) << ", " << stringify(bestFitness) << " ) - ";
       }
       std::cout << "New: ( " << stringify(permutation->values) << ", " << stringify(fitness) << " ) - ";
-      std::cout << "Thread: " << eva->getThreadIndex() << "\n";       
+      std::cout << "Thread: " << eva->getThreadIndex() << ", ";       
+      std::cout << "Rewards: " << stringify( eva->getReproductionRewards() ) << "\n";
     }
   });
   

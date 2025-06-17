@@ -21,8 +21,7 @@ randomPermutation(size_t length) {
   return [length](const EvolutionaryAlgorithm<Individual, Genome>* eva) {
     std::vector<typename Genome::value_type> permutation(length);
     std::iota(permutation.begin(), permutation.end(), 1);
-    std::mt19937 randomGenerator(std::random_device{}());
-    std::shuffle(permutation.begin(), permutation.end(), randomGenerator);
+    std::shuffle(permutation.begin(), permutation.end(), eva->getRandomNumberGenerator());
 
     Genome genome;
     if constexpr (std::ranges::random_access_range<Genome>) {

@@ -25,14 +25,14 @@ class EvolutionaryAlgorithm {
 public:
   struct ThreadConfig {
     using EVA = EvolutionaryAlgorithm<Individual, Genome>;
-    double crossoverProbability = 0.8;
-    double mutationProbability = 0.2;
     std::function<std::pair< std::shared_ptr< const Individual >, Fitness >(const EVA*)> spawn = nullptr;
-    std::function<std::shared_ptr< const Individual >(const EVA*)> parentSelection = nullptr;
-    std::function<std::shared_ptr< const Individual >(const EVA*)> alternativeParentSelection = nullptr;
-    std::function<Genome(const EVA*, const Genome&, const Genome&)> crossover = nullptr;
-    std::function<std::shared_ptr< const Individual >(const EVA*)> mutationSelection = nullptr;
-    std::function<Genome(const EVA*, const Genome&)> mutate = nullptr;
+    double discountFactor = 0.99;
+    std::vector< std::tuple<
+      std::function<std::shared_ptr< const Individual >(const EVA*)>, // selection
+      size_t, // required genomes 
+      std::function<Genome(const EVA*, const std::vector< std::shared_ptr< const Individual > >&)>, // reproduction
+      double // non-negative reward
+    > > reproduction = {};
     std::function<std::shared_ptr< const Individual >(const EVA*, const Genome&)> incubate = nullptr;
     std::function<Fitness(const EVA*, const std::shared_ptr< const Individual >&)> evaluate = nullptr;
   };
@@ -76,36 +76,10 @@ public:
     if ( config.maxPopulationSize < config.minPopulationSize ) {
       throw std::logic_error("EvolutionaryAlgorithm: maximal population size must be at least minimal population");
     }
-    if ( config.threadConfig.parentSelection && !config.threadConfig.crossover ) {
-      throw std::logic_error("EvolutionaryAlgorithm: crossover operator missing");
+
+    if ( config.threadConfig.reproduction.empty() ) {
+      throw std::logic_error("EvolutionaryAlgorithm: reproduction operator(s) missing");
     }
-    if ( !config.threadConfig.parentSelection && config.threadConfig.crossover ) {
-      throw std::logic_error("EvolutionaryAlgorithm: parent selector missing");
-    }
-    if ( !config.threadConfig.alternativeParentSelection ) {
-      config.threadConfig.alternativeParentSelection = config.threadConfig.parentSelection;
-    }
-    if ( config.threadConfig.mutationSelection && !config.threadConfig.mutate ) {
-      throw std::logic_error("EvolutionaryAlgorithm: mutator missing");
-    }
-    if ( !config.threadConfig.mutationSelection && config.threadConfig.mutate ) {
-      throw std::logic_error("EvolutionaryAlgorithm: mutation selector missing");
-    }
-    if ( !config.threadConfig.crossover && !config.threadConfig.mutate ) {
-      throw std::logic_error("EvolutionaryAlgorithm: crossover or mutator needed");
-    }
-    if ( !config.threadConfig.crossover ) {
-      config.threadConfig.crossoverProbability = 0.0;
-      config.threadConfig.mutationProbability = 1.0;
-    }
-    if ( !config.threadConfig.mutate ) {
-      config.threadConfig.crossoverProbability = 1.0;
-      config.threadConfig.mutationProbability = 0.0;
-    }    
-    if ( std::abs(config.threadConfig.crossoverProbability + config.threadConfig.mutationProbability - 1.0) > 1e-10 ) {
-      throw std::logic_error("EvolutionaryAlgorithm: crossover and mutation probabilities must add up to 1");
-    }
-    
     if ( !config.threadConfig.incubate ) {
       throw std::logic_error("EvolutionaryAlgorithm: incubator missing");
     }
@@ -129,7 +103,7 @@ public:
     auto lock = acquireLock();
     solutionCount++;
     if ( fitness > getBest(true).second ) {
-      nonImprovingSolutionCount = 0;
+      nonImprovingSolutionCount = 0;      
     }
     else {
       nonImprovingSolutionCount++;
@@ -168,6 +142,10 @@ public:
   [[nodiscard]] double randomProbability() const {
     return std::uniform_real_distribution<double>(0, 1)(randomNumberGenerator);
   }
+
+  [[nodiscard]] std::mt19937& getRandomNumberGenerator() const {
+    return randomNumberGenerator;
+  }
   
   /// Returns population of individuals with their fitness
   [[nodiscard]] const std::vector< std::pair< std::shared_ptr< const Individual >, Fitness > >& getPopulation() const {  
@@ -177,6 +155,10 @@ public:
   /// Returns a set of population indices, ordered such that individuals with higher fitness appear before those with lower fitness
   [[nodiscard]] const std::set<size_t, Comparator>& getOrderedIndices() const {
     return orderedIndices;
+  }
+
+  [[nodiscard]] const std::vector<double>& getReproductionRewards() const {
+    return rewards;
   }
 
   void run() {
@@ -249,11 +231,12 @@ public:
       return std::make_shared<ThreadConfig>(globalConfig->threadConfig);
     }
   }
-
+  
   void setThreadConfig(size_t index, ThreadConfig config) {
     if (index > 0) {
       std::unique_lock lock(*threadConfigMutex[index-1]);
       threadConfigs[index - 1] = std::make_shared<ThreadConfig>(std::move(config));
+      initializeRewards();
     }
     else {
       std::unique_lock lock(globalConfigMutex);
@@ -279,6 +262,9 @@ protected:
   std::set<size_t, Comparator> orderedIndices; ///< Fitness ordered set of population indices
   static thread_local std::mt19937 randomNumberGenerator;
   static thread_local size_t threadIndex;
+  static thread_local bool lockAcquired;
+  static thread_local std::vector<double> rewards;
+  static thread_local double totalReward;
   std::atomic<unsigned int> solutionCount;
   std::atomic<unsigned int> nonImprovingSolutionCount;
   std::chrono::time_point<std::chrono::system_clock> terminationTime;
@@ -288,6 +274,8 @@ protected:
     auto config = getConfig();
     randomNumberGenerator.seed( config->seed + index );
     threadIndex = index;
+    
+    initializeRewards();
     
     while ( population.size() < config->minPopulationSize ) {
       auto threadConfig = getThreadConfig();
@@ -300,26 +288,40 @@ protected:
     do {
       auto threadConfig = getThreadConfig();
       Fitness fitness;
-      if ( population.size() >= 2 && randomProbability() < threadConfig->crossoverProbability   ) {
-        auto parent1 = threadConfig->parentSelection( this );
-        auto parent2 = threadConfig->alternativeParentSelection( this );
-        while ( parent1.get() == parent2.get() ) {
-          parent2 = threadConfig->alternativeParentSelection( this );
-        }
-        auto& genome1 = *parent1.get();
-        auto& genome2 = *parent2.get();
-        auto offspring = threadConfig->incubate( this, threadConfig->crossover( this, genome1, genome2 ) );
-        fitness = threadConfig->evaluate( this, offspring );
-        add( offspring, fitness );
+      auto rewardThreshold = randomProbability() * totalReward;
+      double cumulativeReward = 0.0;
+      for ( unsigned int i = 0; i < threadConfig->reproduction.size(); i++ ) {
+        auto& [ selector, requiredIndividuals, reproduction, initialReward ] = threadConfig->reproduction[i];
+        // do roulette wheel selection 
+        cumulativeReward += rewards[i];
+        if (cumulativeReward >= rewardThreshold) {
+          // create offspring with selected reproduction strategy
+          std::vector< std::shared_ptr< const Individual > > individuals;
+          individuals.reserve(requiredIndividuals);
+          
+          while ( individuals.size() < requiredIndividuals ) {
+            auto lock = acquireLock();
+            auto individual = selector( this );
+            if (
+              std::find_if(
+                individuals.begin(),
+                individuals.end(),
+                [&individual](const auto& other) { return other.get() == individual.get(); }
+              )
+              == 
+              individuals.end()
+            ) {
+              individuals.push_back( individual );
+            }
+          }
+          
+          auto offspring = threadConfig->incubate( this, reproduction( this, individuals ) );
+          fitness = threadConfig->evaluate( this, offspring );
+          updateRewards( rewards[i], threadConfig->discountFactor, fitness );
+          add( offspring, fitness );          
+          break;
+        }     
       }
-      else {
-        auto individual = threadConfig->mutationSelection( this );
-        auto& genome = *individual.get();
-        auto mutant = threadConfig->incubate( this, threadConfig->mutate( this, genome ) );
-        fitness = threadConfig->evaluate( this, mutant );
-        add( mutant, fitness );
-      }
-            
       if (
         solutionCount >= config->maxSolutionCount ||
         nonImprovingSolutionCount >= config->maxNonImprovingSolutionCount ||
@@ -329,6 +331,34 @@ protected:
         terminate = true;
       }
     } while ( !terminate );
+  }
+
+  void normalizeRewards() {
+    for ( auto& reward : rewards ) {
+      reward /= totalReward;
+    }
+    totalReward = 1.0;
+  }
+
+  void initializeRewards() {
+    rewards.clear();
+    totalReward = 0.0;
+    for ( auto& [ selector, quantity, reproduction, reward ] : getThreadConfig()->reproduction ) {
+      rewards.push_back( reward );
+      totalReward += reward;
+    }
+    normalizeRewards();
+  }
+
+  void updateRewards(double& reward, double discountFactor, const Fitness& fitness) {
+    totalReward -= (1.0 - discountFactor) * reward;
+    reward *= discountFactor;
+    if ( fitness > getBest().second ) {
+      auto delta = ( totalReward - reward ) / rewards.size();
+      totalReward += delta;
+      reward += delta;
+    }
+    normalizeRewards();
   }
 };
 
@@ -347,6 +377,30 @@ requires (
   std::is_convertible_v<Individual,Genome>
 )
 thread_local size_t EvolutionaryAlgorithm<Individual, Genome>::threadIndex = 0;
+
+template < typename Individual, typename Genome >
+requires (
+  std::movable<Individual> &&
+  std::movable<Genome> &&
+  std::is_convertible_v<Individual,Genome>
+)
+thread_local bool EvolutionaryAlgorithm<Individual, Genome>::lockAcquired = false;
+
+template < typename Individual, typename Genome >
+requires (
+  std::movable<Individual> &&
+  std::movable<Genome> &&
+  std::is_convertible_v<Individual,Genome>
+)
+thread_local std::vector<double> EvolutionaryAlgorithm<Individual, Genome>::rewards = {};
+
+template < typename Individual, typename Genome >
+requires (
+  std::movable<Individual> &&
+  std::movable<Genome> &&
+  std::is_convertible_v<Individual,Genome>
+)
+thread_local double EvolutionaryAlgorithm<Individual, Genome>::totalReward = 0.0;
 
 } // end namespace EVA
 

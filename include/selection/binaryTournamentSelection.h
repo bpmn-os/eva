@@ -11,8 +11,6 @@ template <typename Individual, typename Genome = Individual>
   requires (std::is_convertible_v<Individual, Genome>)
 std::function<std::shared_ptr< const Individual >(const EvolutionaryAlgorithm<Individual,Genome>*)> binaryTournamentSelection() {
   return [](const EvolutionaryAlgorithm<Individual, Genome>* eva) {
-    auto lock = eva->acquireLock();
-
     const auto& population = eva->getPopulation();
     size_t size = population.size();
 
