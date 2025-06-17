@@ -26,7 +26,7 @@ public:
   struct ThreadConfig {
     using EVA = EvolutionaryAlgorithm<Individual, Genome>;
     std::function<std::pair< std::shared_ptr< const Individual >, Fitness >(const EVA*)> spawn = nullptr;
-    double discountFactor = 0.99;
+    double discountFactor = 0.9;
     std::vector< std::tuple<
       std::function<std::shared_ptr< const Individual >(const EVA*)>, // selection
       size_t, // required genomes 
@@ -351,14 +351,22 @@ protected:
   }
 
   void updateRewards(double& reward, double discountFactor, const Fitness& fitness) {
-    totalReward -= (1.0 - discountFactor) * reward;
-    reward *= discountFactor;
     if ( fitness > getBest().second ) {
-      auto delta = ( totalReward - reward ) / rewards.size();
-      totalReward += delta;
-      reward += delta;
+      // discount all rewards and increase the current
+      for ( auto& otherReward : rewards ) {
+        otherReward *= discountFactor;
+      }
+      reward += (1.0 - discountFactor) * totalReward;
     }
-    normalizeRewards();
+// TODO: is it worth discounting the reward when solution is not improving?
+/*
+    else {
+      // discount reward and normalize  
+      totalReward -= (1.0 - discountFactor) * reward;
+      reward *= discountFactor;
+      normalizeRewards();
+    }
+*/
   }
 };
 
