@@ -4,6 +4,7 @@
 #include "../include/selection/randomSelection.h"
 #include "../include/crossover/orderedCrossover.h"
 #include "../include/mutator/randomSwap.h"
+#include "../include/mutator/shuffleRandomSegment.h"
 #include "../include/incubator/constructor.h"
 #include "../include/evaluator/fitnessFunction.h"
 #include "../include/spawn/randomPermutation.h"
@@ -73,7 +74,8 @@ int main(int argc, char** argv) {
       .spawn = EVA::randomPermutation<Permutation, Values>(length),
       .reproduction = {
         { EVA::binaryTournamentSelection<Permutation, Values>(), 2, EVA::orderedCrossover<Permutation, Values>(), 1.0 },
-        { EVA::randomSelection<Permutation, Values>(), 1, EVA::randomSwap<Permutation, Values>(), 1.0 }
+        { EVA::rankSelection<Permutation, Values>(), 1, EVA::randomSwap<Permutation, Values>(), 1.0 },
+        { EVA::randomSelection<Permutation, Values>(), 1, EVA::shuffleRandomSegment<Permutation, Values>(), 1.0 }
       },
       .incubate = EVA::constructor<Permutation, Values>(),
       .evaluate = EVA::fitnessFunction<Permutation, Values>()
