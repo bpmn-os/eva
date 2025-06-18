@@ -20,8 +20,8 @@ requires (
     requires(Genome genome, typename Genome::value_type value) { { genome.push_back(value) }; } 
   )
 )
-std::function<Genome(const EvolutionaryAlgorithm<Individual,Genome>*, const std::vector< std::shared_ptr< const Individual > >&)> orderedCrossover() {
-  return []( const EvolutionaryAlgorithm<Individual,Genome>* eva, const std::vector< std::shared_ptr< const Individual > >& individuals ) {
+std::function<Genome(EvolutionaryAlgorithm<Individual,Genome>*, const std::vector< std::shared_ptr< const Individual > >&)> orderedCrossover() {
+  return []( EvolutionaryAlgorithm<Individual,Genome>* eva, const std::vector< std::shared_ptr< const Individual > >& individuals ) {
     const Genome& parent1 = *individuals.begin()->get();
     const Genome& parent2 = *individuals.rbegin()->get();
     auto size = parent1.size();

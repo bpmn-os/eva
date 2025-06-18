@@ -13,8 +13,8 @@ requires (
     { i.getFitness() } -> std::same_as<Fitness>;
   }
 )
-std::function<Fitness(const EvolutionaryAlgorithm<Individual,Genome>*, const std::shared_ptr< const Individual >&)> fitnessFunction() {
-  return []( [[maybe_unused]] const EvolutionaryAlgorithm<Individual,Genome>* eva, const std::shared_ptr< const Individual >& individual ) {
+std::function<Fitness(EvolutionaryAlgorithm<Individual,Genome>*, const std::shared_ptr< const Individual >&)> fitnessFunction() {
+  return []( [[maybe_unused]] EvolutionaryAlgorithm<Individual,Genome>* eva, const std::shared_ptr< const Individual >& individual ) {
     return individual->getFitness();
   };
 }

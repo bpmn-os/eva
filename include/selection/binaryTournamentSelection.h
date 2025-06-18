@@ -9,8 +9,8 @@ namespace EVA {
 
 template <typename Individual, typename Genome = Individual>
   requires (std::is_convertible_v<Individual, Genome>)
-std::function<std::shared_ptr< const Individual >(const EvolutionaryAlgorithm<Individual,Genome>*)> binaryTournamentSelection() {
-  return [](const EvolutionaryAlgorithm<Individual, Genome>* eva) {
+std::function<std::shared_ptr< const Individual >(EvolutionaryAlgorithm<Individual,Genome>*)> binaryTournamentSelection() {
+  return [](EvolutionaryAlgorithm<Individual, Genome>* eva) {
     const auto& population = eva->getPopulation();
     size_t size = population.size();
 

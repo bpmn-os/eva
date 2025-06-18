@@ -25,16 +25,16 @@ class EvolutionaryAlgorithm {
 public:
   struct ThreadConfig {
     using EVA = EvolutionaryAlgorithm<Individual, Genome>;
-    std::function<std::pair< std::shared_ptr< const Individual >, Fitness >(const EVA*)> spawn = nullptr;
+    std::function<std::pair< std::shared_ptr< const Individual >, Fitness >(EVA*)> spawn = nullptr;
     double discountFactor = 0.9;
     std::vector< std::tuple<
-      std::function<std::shared_ptr< const Individual >(const EVA*)>, // selection
+      std::function<std::shared_ptr< const Individual >(EVA*)>, // selection
       size_t, // required genomes 
-      std::function<Genome(const EVA*, const std::vector< std::shared_ptr< const Individual > >&)>, // reproduction
+      std::function<Genome(EVA*, const std::vector< std::shared_ptr< const Individual > >&)>, // reproduction
       double // non-negative reward
     > > reproduction = {};
-    std::function<std::shared_ptr< const Individual >(const EVA*, const Genome&)> incubate = nullptr;
-    std::function<Fitness(const EVA*, const std::shared_ptr< const Individual >&)> evaluate = nullptr;
+    std::function<std::shared_ptr< const Individual >(EVA*, const Genome&)> incubate = nullptr;
+    std::function<Fitness(EVA*, const std::shared_ptr< const Individual >&)> evaluate = nullptr;
   };
 
   struct Config {
@@ -47,8 +47,8 @@ public:
     unsigned int maxSolutionCount = std::numeric_limits<unsigned int>::max();  /// Maximum number of solutions to be generated before termination 
     unsigned int maxNonImprovingSolutionCount = std::numeric_limits<unsigned int>::max(); /// Maximum number of solutions without improvement to be generated before termination 
     ThreadConfig threadConfig = {}; /// Default configuration for the threads 
-    std::function<bool(const EVA*)> termination = nullptr; /// Custom termination function
-    std::function<void(const EVA*, const std::shared_ptr< const Individual >&, const Fitness&)> monitor = nullptr; /// Callback allowing to monitor the progress of the algorithm (note: the population is locked while the callback is executed)
+    std::function<bool(EVA*)> termination = nullptr; /// Custom termination function
+    std::function<void(EVA*, const std::shared_ptr< const Individual >&, const Fitness&)> monitor = nullptr; /// Callback allowing to monitor the progress of the algorithm (note: the population is locked while the callback is executed)
   };
 
    /// Comparator ordering elements with higher fitness before elements with lower 

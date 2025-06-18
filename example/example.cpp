@@ -63,11 +63,11 @@ int main(int argc, char** argv) {
   // Create instance of evolutionary algorithm with inline configuration
   EVA::EvolutionaryAlgorithm< Permutation, Values > eva({
     .threads = 8,
-    .minPopulationSize = 5,
+    .minPopulationSize = 50,
     .maxPopulationSize = 100,
     .maxComputationTime = 60,
     .maxSolutionCount = 100000,
-    .maxNonImprovingSolutionCount = 1000,
+    .maxNonImprovingSolutionCount = 10000,
     .threadConfig = {
       // use default implementations
       .spawn = EVA::randomPermutation<Permutation, Values>(length),
@@ -85,13 +85,13 @@ int main(int argc, char** argv) {
 */
     },
     // create lambda
-    .termination = []( [[maybe_unused]] const EVA::EvolutionaryAlgorithm< Permutation, Values >* eva) {
+    .termination = []( [[maybe_unused]] EVA::EvolutionaryAlgorithm< Permutation, Values >* eva) {
       auto [bestPermutation, bestFitness] = eva->getBest();
       // return true if best permutation is perfectly ordered
       return ( bestFitness[0] > 1 - 1e-10 ); 
     },
     // create lambda
-    .monitor = []( [[maybe_unused]] const EVA::EvolutionaryAlgorithm< Permutation, Values >* eva, const std::shared_ptr< const Permutation >& permutation, const EVA::Fitness& fitness) {
+    .monitor = []( [[maybe_unused]] EVA::EvolutionaryAlgorithm< Permutation, Values >* eva, const std::shared_ptr< const Permutation >& permutation, const EVA::Fitness& fitness) {
       std::cout << eva->getSolutionCount() << ". ";       
       std::cout << "(" << eva->getNonImprovingSolutionCount() << ") ";       
       auto [bestPermutation, bestFitness] = eva->getBest(true);

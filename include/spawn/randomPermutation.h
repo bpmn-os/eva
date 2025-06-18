@@ -16,9 +16,9 @@ requires (
     requires(Genome genome, typename Genome::value_type value) { { genome.push_back(value) }; } 
   )
 )
-std::function<std::pair< std::shared_ptr< const Individual >, Fitness >(const EvolutionaryAlgorithm<Individual, Genome>*)> 
+std::function<std::pair< std::shared_ptr< const Individual >, Fitness >(EvolutionaryAlgorithm<Individual, Genome>*)> 
 randomPermutation(size_t length) {
-  return [length](const EvolutionaryAlgorithm<Individual, Genome>* eva) {
+  return [length](EvolutionaryAlgorithm<Individual, Genome>* eva) {
     std::vector<typename Genome::value_type> permutation(length);
     std::iota(permutation.begin(), permutation.end(), 1);
     std::shuffle(permutation.begin(), permutation.end(), eva->getRandomNumberGenerator());
