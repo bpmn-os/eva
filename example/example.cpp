@@ -101,8 +101,8 @@ int main(int argc, char** argv) {
         std::cout << "Previous best: ( " << stringify(bestPermutation->values) << ", " << stringify(bestFitness) << " ) - ";
       }
       std::cout << "New: ( " << stringify(permutation->values) << ", " << stringify(fitness) << " ) - ";
-      std::cout << "Thread: " << eva->getThreadIndex() << ", ";       
-      std::cout << "Rewards: " << stringify( eva->getReproductionRewards() ) << "\n";
+      std::cout << "Thread: " << eva->getThreadIndex() << ", ";
+      std::cout << "Weights: " << stringify( eva->getWeights() ) << "\n";
     }
   });
   

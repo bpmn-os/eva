@@ -4,10 +4,10 @@ This C++ header-only library provides an implementation of an evolutionary algor
 
 ## Core Concepts - `Individual` and `Genome`
 
-  * **`Genome`**: This type represents the genetic material directly manipulated by genetic operators such as crossover and mutation.
-  * **`Individual`**: This type represents a complete entity within the population. An `Individual` is created by incubating a `Genome`. Incubation may comprise the inclusion of additional data not contained in the `Genome` and heuristic variations of the `Genome` , e.g., by education. 
+  * **`Genome`**: This type represents the genetic material directly manipulated by genetic operators such as *crossover* and *mutation*.
+  * **`Individual`**: This type represents a complete entity within the population. An `Individual` is created by *incubating* a `Genome`. Incubation may comprise the inclusion of additional data not contained in the `Genome` and heuristic variations of the `Genome` , e.g., by education. 
 
-The library requires that `Individual` objects can be implicitly converted to `Genome` objects, as enforced by the `std::is_convertible_v<Individual, Genome>` constraint. This allows genetic operators expecting a `Genome` to directly process `Individual` objects. An custom `incubate` function is needed to transform a `Genome` (the result of genetic operations) into an `Individual` suitable for population inclusion.
+The library requires that `Individual` objects can be implicitly converted to `Genome` objects, as enforced by the `std::is_convertible_v<Individual, Genome>` constraint. This allows genetic operators expecting a `Genome` to directly process `Individual` objects. A custom `incubate` function is needed to transform a `Genome` (the result of genetic operations) into an `Individual` suitable for population inclusion.
 
 ## Features
 

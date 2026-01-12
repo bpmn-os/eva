@@ -15,25 +15,68 @@ namespace EVA {
 
 using Fitness = std::vector<double>;
 
+/**
+ * @brief Multi-threaded evolutionary algorithm with adaptive operator selection
+ *
+ * A template-based evolutionary algorithm that evolves a population of individuals
+ * using configurable genetic operators (selection, crossover, mutation). Supports
+ * multi-threading with per-thread configurations and automatically adapts operator
+ * selection based on which strategies produce better solutions.
+ *
+ * @tparam Individual The complete entity in the population (must be convertible to Genome)
+ * @tparam Genome The genetic material manipulated by genetic operators
+ */
 template < typename Individual, typename Genome = Individual >
 requires (
-  std::movable<Individual> && 
-  std::movable<Genome> && 
+  std::movable<Individual> &&
+  std::movable<Genome> &&
   std::is_convertible_v<Individual,Genome>
 )
 class EvolutionaryAlgorithm {
 public:
+  /**
+   * @brief Configuration for thread-specific evolutionary operators
+   *
+   * Defines genetic operators (spawn, selection, reproduction) and adaptation settings
+   * for a single thread. Threads can have different configurations to explore the
+   * search space using different strategies simultaneously.
+   *
+   * Supports adaptive operator selection: when multiple reproduction strategies are
+   * provided, the algorithm learns which work best and uses them more frequently.
+   * Controlled by adaptationRate (higher = faster learning).
+   */
   struct ThreadConfig {
     using EVA = EvolutionaryAlgorithm<Individual, Genome>;
+
+    /// Function to create initial individuals (used during population seeding)
     std::function<std::pair< std::shared_ptr< const Individual >, Fitness >(EVA*)> spawn = nullptr;
-    double discountFactor = 0.9;
+
+    /**
+     * @brief Learning rate for adaptive operator selection (0.0 = no learning, 1.0 = instant)
+     *
+     * When a strategy produces a new best solution, its weight increases by this rate.
+     * Default 0.1 provides gradual, stable learning. Higher values (e.g., 0.5) adapt faster
+     * but may be less stable.
+     */
+    double adaptationRate = 0.1;
+
+    /**
+     * @brief Reproduction strategies: (selector, num_parents, operator, initial_weight)
+     *
+     * Multiple strategies can be provided (e.g., crossover, different mutations).
+     * The algorithm learns which produce better solutions and uses them more frequently.
+     */
     std::vector< std::tuple<
       std::function<std::shared_ptr< const Individual >(EVA*)>, // selection
-      size_t, // required genomes 
+      size_t, // required individuals
       std::function<Genome(EVA*, const std::vector< std::shared_ptr< const Individual > >&)>, // reproduction
-      double // non-negative reward
+      double // initial weight
     > > reproduction = {};
+
+    /// Function to transform a genome into a complete individual
     std::function<std::shared_ptr< const Individual >(EVA*, const Genome&)> incubate = nullptr;
+
+    /// Function to compute fitness for an individual
     std::function<Fitness(EVA*, const std::shared_ptr< const Individual >&)> evaluate = nullptr;
   };
 
@@ -157,12 +200,16 @@ public:
     return orderedIndices;
   }
 
-  [[nodiscard]] const std::vector<double>& getReproductionRewards() const {
-    return rewards;
+  /**
+   * @brief Get current adaptive weights for reproduction strategies
+   * @return Normalized probabilities for each strategy (thread-local)
+   */
+  [[nodiscard]] const std::vector<double>& getWeights() const {
+    return weights;
   }
 
   void run() {
-    auto config = getConfig(); 
+    auto config = getConfig();
     solutionCount = 0;
     nonImprovingSolutionCount = 0;
     if ( config->maxComputationTime == std::numeric_limits<unsigned int>::max() ) {
@@ -172,6 +219,7 @@ public:
       terminationTime = std::chrono::system_clock::now()  + std::chrono::seconds(config->maxComputationTime);;
     }
     terminate = false;
+    threadsRunning = true;
     std::vector<std::jthread> workers;
 
     for (unsigned int index = 1; index <= config->threads; ++index) {
@@ -181,6 +229,8 @@ public:
         }
       );
     }
+    // jthreads auto-join when destroyed at end of scope
+    threadsRunning = false;
   }
 
   /// Returns a lock guard for thread-safe access to the population
@@ -221,7 +271,12 @@ public:
     globalConfig = std::make_shared<Config>(std::move(config));
   }
 
-  std::shared_ptr<ThreadConfig> getThreadConfig(size_t index = getThreadIndex()) const { 
+  /**
+   * @brief Get thread configuration
+   * @param index Thread index (default: current thread)
+   * @return Thread configuration
+   */
+  std::shared_ptr<ThreadConfig> getThreadConfig(size_t index = getThreadIndex()) const {
     if ( index > 0 ) {
       std::shared_lock lock(*threadConfigMutex[index-1]);
       return threadConfigs[index-1];
@@ -231,12 +286,26 @@ public:
       return std::make_shared<ThreadConfig>(globalConfig->threadConfig);
     }
   }
-  
+
+  /**
+   * @brief Set configuration for a specific thread (must be called before run())
+   * @param index Thread index (0 = global default, 1-N = worker threads)
+   * @param config New configuration
+   * @throws std::logic_error if called after run() has started
+   *
+   * For runtime reconfiguration, use setThreadConfig(config) without index.
+   */
   void setThreadConfig(size_t index, ThreadConfig config) {
+    if (threadsRunning) {
+      throw std::logic_error(
+        "setThreadConfig(index, config) can only be called before run(). "
+        "Use setThreadConfig(config) from within threads to reconfigure at runtime."
+      );
+    }
+
     if (index > 0) {
       std::unique_lock lock(*threadConfigMutex[index-1]);
       threadConfigs[index - 1] = std::make_shared<ThreadConfig>(std::move(config));
-      initializeRewards();
     }
     else {
       std::unique_lock lock(globalConfigMutex);
@@ -245,8 +314,27 @@ public:
       globalConfig = std::move(global);
     }
   }
+
+  /**
+   * @brief Reconfigure current thread (can be called during run())
+   * @param config New configuration
+   *
+   * Thread reinitializes its adaptive weights to match the new configuration.
+   * Typically used from within callback functions.
+   */
   void setThreadConfig(ThreadConfig config) {
-    setThreadConfig(getThreadIndex(), std::move(config));
+    size_t index = getThreadIndex();
+    if (index > 0) {
+      std::unique_lock lock(*threadConfigMutex[index-1]);
+      threadConfigs[index - 1] = std::make_shared<ThreadConfig>(std::move(config));
+      initializeWeights(threadConfigs[index - 1]);  // Safe - our own weights
+    }
+    else {
+      std::unique_lock lock(globalConfigMutex);
+      auto global = std::make_shared<Config>(*globalConfig);  // copy
+      global->threadConfig = std::move(config);
+      globalConfig = std::move(global);
+    }
   }
 
   static size_t getThreadIndex() { return threadIndex; };
@@ -263,42 +351,43 @@ protected:
   static thread_local std::mt19937 randomNumberGenerator;
   static thread_local size_t threadIndex;
   static thread_local bool lockAcquired;
-  static thread_local std::vector<double> rewards;
-  static thread_local double totalReward;
+  static thread_local std::vector<double> weights;
+  static thread_local double totalWeight;
   std::atomic<unsigned int> solutionCount;
   std::atomic<unsigned int> nonImprovingSolutionCount;
   std::chrono::time_point<std::chrono::system_clock> terminationTime;
   std::atomic<bool> terminate;
+  std::atomic<bool> threadsRunning{false};
 
   void runThread(unsigned int index) {
     auto config = getConfig();
     randomNumberGenerator.seed( config->seed + index );
     threadIndex = index;
-    
-    initializeRewards();
-    
+
+    auto threadConfig = getThreadConfig();
+    initializeWeights(threadConfig);
+
     while ( population.size() < config->minPopulationSize ) {
-      auto threadConfig = getThreadConfig();
       // spawn individual
       auto [ individual, fitness ] = threadConfig->spawn( this );
       // add individual
       add( individual, fitness );
     }
-    
+
     do {
-      auto threadConfig = getThreadConfig();
+      threadConfig = getThreadConfig();
       Fitness fitness;
-      auto rewardThreshold = randomProbability() * totalReward;
-      double cumulativeReward = 0.0;
+      auto weightThreshold = randomProbability() * totalWeight;
+      double cumulativeWeight = 0.0;
       for ( unsigned int i = 0; i < threadConfig->reproduction.size(); i++ ) {
-        auto& [ selector, requiredIndividuals, reproduction, initialReward ] = threadConfig->reproduction[i];
-        // do roulette wheel selection 
-        cumulativeReward += rewards[i];
-        if (cumulativeReward >= rewardThreshold) {
+        auto& [ selector, requiredIndividuals, reproduction, initialWeight ] = threadConfig->reproduction[i];
+        // do roulette wheel selection
+        cumulativeWeight += weights[i];
+        if (cumulativeWeight >= weightThreshold) {
           // create offspring with selected reproduction strategy
           std::vector< std::shared_ptr< const Individual > > individuals;
           individuals.reserve(requiredIndividuals);
-          
+
           while ( individuals.size() < requiredIndividuals ) {
             auto lock = acquireLock();
             auto individual = selector( this );
@@ -308,19 +397,19 @@ protected:
                 individuals.end(),
                 [&individual](const auto& other) { return other.get() == individual.get(); }
               )
-              == 
+              ==
               individuals.end()
             ) {
               individuals.push_back( individual );
             }
           }
-          
+
           auto offspring = threadConfig->incubate( this, reproduction( this, individuals ) );
           fitness = threadConfig->evaluate( this, offspring );
-          updateRewards( rewards[i], threadConfig->discountFactor, fitness );
-          add( offspring, fitness );          
+          updateWeights( weights[i], threadConfig->adaptationRate, fitness );
+          add( offspring, fitness );
           break;
-        }     
+        }
       }
       if (
         solutionCount >= config->maxSolutionCount ||
@@ -333,38 +422,41 @@ protected:
     } while ( !terminate );
   }
 
-  void normalizeRewards() {
-    for ( auto& reward : rewards ) {
-      reward /= totalReward;
+  /// Normalize weights to sum to 1.0 (for roulette wheel selection)
+  void normalizeWeights() {
+    for ( auto& weight : weights ) {
+      weight /= totalWeight;
     }
-    totalReward = 1.0;
+    totalWeight = 1.0;
   }
 
-  void initializeRewards() {
-    rewards.clear();
-    totalReward = 0.0;
-    for ( auto& [ selector, quantity, reproduction, reward ] : getThreadConfig()->reproduction ) {
-      rewards.push_back( reward );
-      totalReward += reward;
+  /// Initialize thread-local weights from config (called at startup and reconfiguration)
+  void initializeWeights(const std::shared_ptr<ThreadConfig>& config) {
+    weights.clear();
+    totalWeight = 0.0;
+    for ( auto& [ selector, quantity, reproduction, weight ] : config->reproduction ) {
+      weights.push_back( weight );
+      totalWeight += weight;
     }
-    normalizeRewards();
+    normalizeWeights();
   }
 
-  void updateRewards(double& reward, double discountFactor, const Fitness& fitness) {
+  /// Update weights when a strategy produces a new best solution (adaptive learning)
+  void updateWeights(double& weight, double adaptationRate, const Fitness& fitness) {
     if ( fitness > getBest().second ) {
-      // discount all rewards and increase the current
-      for ( auto& otherReward : rewards ) {
-        otherReward *= discountFactor;
+      // scale down all weights and increase the successful one
+      for ( auto& otherWeight : weights ) {
+        otherWeight -= adaptationRate * otherWeight;
       }
-      reward += (1.0 - discountFactor) * totalReward;
+      weight += adaptationRate * totalWeight;
     }
-// TODO: is it worth discounting the reward when solution is not improving?
+// TODO: is it worth penalizing the weight when solution is not improving?
 /*
     else {
-      // discount reward and normalize  
-      totalReward -= (1.0 - discountFactor) * reward;
-      reward *= discountFactor;
-      normalizeRewards();
+      // scale down weight and normalize
+      totalWeight -= adaptationRate * weight;
+      weight *= (1.0 - adaptationRate);
+      normalizeWeights();
     }
 */
   }
@@ -400,7 +492,7 @@ requires (
   std::movable<Genome> &&
   std::is_convertible_v<Individual,Genome>
 )
-thread_local std::vector<double> EvolutionaryAlgorithm<Individual, Genome>::rewards = {};
+thread_local std::vector<double> EvolutionaryAlgorithm<Individual, Genome>::weights = {};
 
 template < typename Individual, typename Genome >
 requires (
@@ -408,7 +500,7 @@ requires (
   std::movable<Genome> &&
   std::is_convertible_v<Individual,Genome>
 )
-thread_local double EvolutionaryAlgorithm<Individual, Genome>::totalReward = 0.0;
+thread_local double EvolutionaryAlgorithm<Individual, Genome>::totalWeight = 0.0;
 
 } // end namespace EVA
 
