@@ -17,6 +17,7 @@
 #include <ranges>
 
 using Values = std::vector<unsigned int>;
+
 /// Permutation class representing individuals in the population
 struct Permutation {
   Values values; /// The genome

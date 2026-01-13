@@ -9,32 +9,65 @@ This C++ header-only library provides an implementation of an evolutionary algor
 
 The library requires that `Individual` objects can be implicitly converted to `Genome` objects, as enforced by the `std::is_convertible_v<Individual, Genome>` constraint. This allows genetic operators expecting a `Genome` to directly process `Individual` objects. A custom `incubate` function is needed to transform a `Genome` (the result of genetic operations) into an `Individual` suitable for population inclusion.
 
-## Features
+## Configuration
 
-  * **Generic Design:** The library is templated on `Individual` and `Genome` types, supporting custom data structures for these representations.
-  * **Configurable Operators:** Genetic operators like selection, crossover, mutation, as well as other functions for incubation, evaluation, termination, and monitoring are managed via customizable `std::function` objects.
+The library uses two configuration structures:
 
-### Configurable Functions
+### Global Configuration (`Config`)
 
-The `EvolutionaryAlgorithm::Config` struct defines `std::function` members for specifying custom functions:
+Controls algorithm-wide settings:
 
-  * `spawn`: A function that creates a new `Individual` with its `Fitness`.
-  * `parentSelection`, `alternativeParentSelection`: Functions for selecting parent individuals for reproduction.
-  * `crossover`: A function that combines two `Genome` objects to produce a new `Genome`.
-  * `mutationSelection`: A function that selects an individual to be mutated.
-  * `mutate`: A function that modifies a `Genome` to produce a new `Genome`.
-  * `incubate`: A function that transforms a `Genome` into an `Individual`.
-  * `evaluate`: A function responsible for assigning a `Fitness` value (represented as `std::vector<double>`) to an `Individual`.
-  * `termination`: A function that defines the stopping condition for the evolutionary process.
-  * `monitor`: An optional callback function for observing the population of individuals during execution.
+  * `threads`: Number of worker threads
+  * `minPopulationSize`: Minimum population size before evolution starts
+  * `maxPopulationSize`: Maximum number of individuals to keep
+  * `maxSolutionCount`: Stop after generating this many solutions
+  * `maxComputationTime`: Maximum runtime in seconds
+  * `maxNonImprovingSolutionCount`: Stop after this many solutions without improvement
+  * `threadConfig`: Default configuration for all threads
+  * `termination`: Callback to check if algorithm should stop `bool(EVA*)`
+  * `monitor`: Callback invoked for each new solution `void(EVA*, const Individual&, const Fitness&)`
 
------
+> [!IMPORTANT]
+> **Threading and Locking:**
+> - Both `termination` and `monitor` are **called from worker threads**
+> - If you access your own variables (captured by reference), protect them with locks or atomics
+> - `monitor` is called while **population is already locked** - safe to call `getPopulation()`, `getBest()`, `getWorst()` without additional locking
+
+### Thread Configuration (`ThreadConfig`)
+
+Defines genetic operators per thread (each thread can have different strategies):
+
+  * `spawn`: Creates initial individuals `pair<Individual, Fitness>(EVA*)`
+  * `adaptationRate`: Rate for adaptive selection of reproduction strategy
+  * `reproduction`: Vector of reproduction strategies, each containing:
+    - Selection function: chooses parent(s) `Individual(EVA*)`
+    - Parent count: number of parents required
+    - Reproduction operator: creates offspring `Genome(EVA*, vector<Individual>&)`
+    - Initial weight: starting probability weight
+  * `incubate`: Transforms `Genome` to `Individual`: `Individual(EVA*, const Genome&)`
+  * `evaluate`: Assigns fitness to `Individual`: `Fitness(EVA*, const Individual&)`
+
+**Adaptive Operator Selection:**
+When multiple reproduction strategies are provided, the algorithm uses roulette wheel selection based on operator weights. The weights are updated after each reproduction based on the offspring's fitness:
+  - Successful operators (producing fit offspring) get their weights increased
+  - The `adaptationRate` controls how quickly weights adapt (0.0 = no adaptation)
+  - Weights are **thread-local** - each thread learns independently which operators work best
+  - Access current weights via `getWeights()` from within callbacks (only callable from worker threads)
+
 
 ## Example
 
-A detailed example demonstrating the usage of this library can be found in the `example/` directory.
+An example demonstrating the usage of this library can be found in the `example/` directory.
 
------
+## Testing
+
+Tests can be run as follows.
+
+**Build and run tests:**
+```bash
+cd tests
+make run
+```
 
 ## License
 

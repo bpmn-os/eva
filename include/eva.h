@@ -203,8 +203,12 @@ public:
   /**
    * @brief Get current adaptive weights for reproduction strategies
    * @return Normalized probabilities for each strategy (thread-local)
+   * @throws std::logic_error if called from main thread (outside worker threads)
    */
   [[nodiscard]] const std::vector<double>& getWeights() const {
+    if (getThreadIndex() == 0) {
+      throw std::logic_error("getWeights() can only be called from worker threads during run()");
+    }
     return weights;
   }
 
@@ -322,12 +326,14 @@ public:
    * Thread reinitializes its adaptive weights to match the new configuration.
    * Typically used from within callback functions.
    */
-  void setThreadConfig(ThreadConfig config) {
+  void setThreadConfig(ThreadConfig config, bool reinitializeWeights = false) {
     size_t index = getThreadIndex();
     if (index > 0) {
       std::unique_lock lock(*threadConfigMutex[index-1]);
       threadConfigs[index - 1] = std::make_shared<ThreadConfig>(std::move(config));
-      initializeWeights(threadConfigs[index - 1]);  // Safe - our own weights
+      if ( reinitializeWeights ) {
+        initializeWeights(threadConfigs[index - 1]);  // Safe - our own weights
+      }
     }
     else {
       std::unique_lock lock(globalConfigMutex);
