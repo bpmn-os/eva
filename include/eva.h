@@ -374,6 +374,8 @@ protected:
     initializeWeights(threadConfig);
 
     while ( population.size() < config->minPopulationSize ) {
+      // update to latest config
+      threadConfig = getThreadConfig();
       // spawn individual
       auto [ individual, fitness ] = threadConfig->spawn( this );
       // add individual
