@@ -166,7 +166,7 @@ public:
     bool duplicate = false;
     if ( fitness <= getBest(true).second ) {   
       for ( auto& [other_individual,other_fitness] : population ) {
-        if ( other_fitness == fitness && other_individual == individual ) {
+        if ( other_fitness == fitness && *other_individual == *individual ) {
           duplicate = true;
           break;
         }
