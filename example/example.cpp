@@ -40,6 +40,12 @@ struct Permutation {
   operator const Values&() const {
     return values;
   }
+
+  // Equality comparison
+  bool operator==(const Permutation& other) const {
+    // consider using predetermined hash to avoid element-wise comparisons
+    return values == other.values;
+  }
 };
 
 /// Helper function to print out individuals and fitness

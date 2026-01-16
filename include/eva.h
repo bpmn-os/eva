@@ -30,7 +30,8 @@ template < typename Individual, typename Genome = Individual >
 requires (
   std::movable<Individual> &&
   std::movable<Genome> &&
-  std::is_convertible_v<Individual,Genome>
+  std::is_convertible_v<Individual,Genome> &&                                 
+  std::equality_comparable<Individual>     
 )
 class EvolutionaryAlgorithm {
 public:
@@ -161,18 +162,30 @@ public:
       config->monitor( this, individual, fitness );
     }
     
-    if ( population.size() < config->maxPopulationSize ) {
-      // add individual to population
-      size_t index = population.size();
-      population.emplace_back(std::move(individual), std::move(fitness));
-      orderedIndices.insert(index);
+    
+    bool duplicate = false;
+    if ( fitness <= getBest(true).second ) {   
+      for ( auto& [other_individual,other_fitness] : population ) {
+        if ( other_fitness == fitness && other_individual == individual ) {
+          duplicate = true;
+          break;
+        }
+      }
     }
-    else {
-      // replace worst individual in population
-      size_t index = *orderedIndices.rbegin();
-      population[index] = std::make_pair(std::move(individual), std::move(fitness));
-      orderedIndices.erase(std::prev(orderedIndices.end()));
-      orderedIndices.insert(index);
+    if ( !duplicate ) {
+      if ( population.size() < config->maxPopulationSize ) {
+        // add individual to population
+        size_t index = population.size();
+        population.emplace_back(std::move(individual), std::move(fitness));
+        orderedIndices.insert(index);
+      }
+      else {
+        // replace worst individual in population
+        size_t index = *orderedIndices.rbegin();
+        population[index] = std::make_pair(std::move(individual), std::move(fitness));
+        orderedIndices.erase(std::prev(orderedIndices.end()));
+        orderedIndices.insert(index);
+      }
     }
   }
   
@@ -474,7 +487,8 @@ template < typename Individual, typename Genome >
 requires (
   std::movable<Individual> &&
   std::movable<Genome> &&
-  std::is_convertible_v<Individual,Genome>
+  std::is_convertible_v<Individual,Genome> &&                                 
+  std::equality_comparable<Individual>
 )
 thread_local std::mt19937 EvolutionaryAlgorithm<Individual, Genome>::randomNumberGenerator;
 
@@ -482,7 +496,8 @@ template < typename Individual, typename Genome >
 requires (
   std::movable<Individual> &&
   std::movable<Genome> &&
-  std::is_convertible_v<Individual,Genome>
+  std::is_convertible_v<Individual,Genome> &&                                 
+  std::equality_comparable<Individual>     
 )
 thread_local size_t EvolutionaryAlgorithm<Individual, Genome>::threadIndex = 0;
 
@@ -490,7 +505,8 @@ template < typename Individual, typename Genome >
 requires (
   std::movable<Individual> &&
   std::movable<Genome> &&
-  std::is_convertible_v<Individual,Genome>
+  std::is_convertible_v<Individual,Genome> &&                                 
+  std::equality_comparable<Individual>     
 )
 thread_local bool EvolutionaryAlgorithm<Individual, Genome>::lockAcquired = false;
 
@@ -498,7 +514,8 @@ template < typename Individual, typename Genome >
 requires (
   std::movable<Individual> &&
   std::movable<Genome> &&
-  std::is_convertible_v<Individual,Genome>
+  std::is_convertible_v<Individual,Genome> &&                                 
+  std::equality_comparable<Individual>     
 )
 thread_local std::vector<double> EvolutionaryAlgorithm<Individual, Genome>::weights = {};
 
@@ -506,7 +523,8 @@ template < typename Individual, typename Genome >
 requires (
   std::movable<Individual> &&
   std::movable<Genome> &&
-  std::is_convertible_v<Individual,Genome>
+  std::is_convertible_v<Individual,Genome> &&                                 
+  std::equality_comparable<Individual>     
 )
 thread_local double EvolutionaryAlgorithm<Individual, Genome>::totalWeight = 0.0;
 
