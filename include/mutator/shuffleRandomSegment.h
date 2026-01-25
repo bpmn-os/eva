@@ -32,7 +32,9 @@ std::function<Genome(EvolutionaryAlgorithm<Individual,Genome>*, const std::vecto
     
     if (i > j) std::swap(i, j);
 
-    std::ranges::shuffle(mutant.begin() + i, mutant.begin() + j + 1, eva->getRandomNumberGenerator());
+    auto start = std::next(mutant.begin(), i);
+    auto end = std::next(start, j + 1 - i);
+    std::ranges::shuffle(start, end, eva->getRandomNumberGenerator());
 
     return mutant;
   };
