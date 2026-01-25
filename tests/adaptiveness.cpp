@@ -29,7 +29,7 @@ TEST_CASE("Adaptive weights favor successful operators", "[adaptive]") {
 
   EVA::EvolutionaryAlgorithm<Permutation, Values> eva({
     .threads = 1,
-    .minPopulationSize = 5,
+    .minPopulationSize = 1,
     .maxPopulationSize = 10,
     .maxSolutionCount = 50,
     .threadConfig = {
@@ -85,7 +85,7 @@ TEST_CASE("Zero adaptation rate keeps weights constant", "[adaptive]") {
 
   EVA::EvolutionaryAlgorithm<Permutation, Values> eva({
     .threads = 1,
-    .minPopulationSize = 5,
+    .minPopulationSize = 1,
     .maxPopulationSize = 10,
     .maxSolutionCount = 50,
     .threadConfig = {

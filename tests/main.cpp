@@ -33,6 +33,11 @@ struct Permutation {
   Permutation(Values v) : values(std::move(v)) {}
   // Conversion to Genome (required by genetic operators)
   operator const Values&() const { return values; }
+
+  // Equality comparison
+  bool operator==(const Permutation& other) const {
+    return values == other.values;
+  }
 };
 
 // Include all test files
