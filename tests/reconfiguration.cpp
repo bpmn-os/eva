@@ -20,7 +20,7 @@ TEST_CASE("Reconfiguration before run", "[reconfiguration]") {
 
   EVA::EvolutionaryAlgorithm<Permutation, Values> eva({
     .threads = 2,
-    .minPopulationSize = 5,
+    .minPopulationSize = 10,
     .maxPopulationSize = 10,
     .maxSolutionCount = 10,
     .threadConfig = defaultConfig
