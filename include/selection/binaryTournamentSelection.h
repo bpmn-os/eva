@@ -14,11 +14,8 @@ std::function<std::shared_ptr< const Individual >(EvolutionaryAlgorithm<Individu
     const auto& population = eva->getPopulation();
     size_t size = population.size();
 
-    if (size < 2) throw std::logic_error("Binary tournament requires at least 2 individuals");
-
     size_t i = eva->randomIndex(size);
     size_t j = eva->randomIndex(size);
-    while (j == i) j = eva->randomIndex(size); // ensure two distinct individuals
 
     const auto& candidate1 = population[i];
     const auto& candidate2 = population[j];
