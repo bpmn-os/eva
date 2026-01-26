@@ -61,7 +61,7 @@ TEST_CASE("Self-reconfiguration during run", "[reconfiguration]") {
 
   EVA::EvolutionaryAlgorithm<Permutation, Values> eva({
     .threads = 2,
-    .minPopulationSize = 5,
+    .minPopulationSize = 10,
     .maxPopulationSize = 10,
     .maxSolutionCount = 10,
     .threadConfig = defaultConfig
@@ -74,3 +74,4 @@ TEST_CASE("Self-reconfiguration during run", "[reconfiguration]") {
   REQUIRE(eva.getThreadConfig(1)->reproduction.size() == 2); // defaultConfig has 2 reproduction operators
   REQUIRE(eva.getSolutionCount() >= 10);  // Algorithm completed
 }
+

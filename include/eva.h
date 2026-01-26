@@ -62,7 +62,7 @@ public:
     double adaptationRate = 0.1;
 
     /**
-     * @brief Reproduction strategies: (selector, num_parents, operator, initial_weight)
+     * @brief Reproduction strategies: (selector, number_of_parents, operator, initial_weight)
      *
      * Multiple strategies can be provided (e.g., crossover, different mutations).
      * The algorithm learns which produce better solutions and uses them more frequently.
@@ -409,7 +409,7 @@ protected:
           std::vector< std::shared_ptr< const Individual > > individuals;
           individuals.reserve(requiredIndividuals);
 
-          while ( individuals.size() < requiredIndividuals ) {
+          for ( unsigned int j = 0; j < requiredIndividuals; j++ ) {
             auto lock = acquireLock();
             auto individual = selector( this );
             if (
@@ -418,18 +418,21 @@ protected:
                 individuals.end(),
                 [&individual](const auto& other) { return other.get() == individual.get(); }
               )
-              ==
+              !=
               individuals.end()
             ) {
-              individuals.push_back( individual );
+              break; // same individual is selected twice
             }
+            individuals.push_back( individual );
           }
-
-          auto offspring = threadConfig->incubate( this, reproduction( this, individuals ) );
-          fitness = threadConfig->evaluate( this, offspring );
-          updateWeights( weights[i], threadConfig->adaptationRate, fitness );
-          add( offspring, fitness );
-          break;
+          
+          if (individuals.size() == requiredIndividuals) {
+            auto offspring = threadConfig->incubate( this, reproduction( this, individuals ) );
+            fitness = threadConfig->evaluate( this, offspring );
+            updateWeights( weights[i], threadConfig->adaptationRate, fitness );
+            add( offspring, fitness );
+            break;
+          }
         }
       }
       if (
