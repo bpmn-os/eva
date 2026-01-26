@@ -12,8 +12,10 @@ TEST_CASE("Adaptive weights favor successful operators", "[adaptive]") {
   auto goodOperator = []([[maybe_unused]] auto* eva, const std::vector<std::shared_ptr<const Permutation>>& parents) -> Values {
     Values values = parents[0]->values;
     // Swap first two if out of order - makes it better
-    if (values.size() >= 2 && values[0] > values[1]) {
-      std::swap(values[0], values[1]);
+    for (size_t i = 0; i < values.size()-1; i++) {
+      if (values.size() >= 2 && values[i] > values[i+1]) {
+        std::swap(values[i], values[i+1]);
+      }
     }
     return values;
   };
@@ -21,8 +23,10 @@ TEST_CASE("Adaptive weights favor successful operators", "[adaptive]") {
   auto badOperator = []([[maybe_unused]] auto* eva, const std::vector<std::shared_ptr<const Permutation>>& parents) -> Values {
     Values values = parents[0]->values;
     // Swap first two if in order - makes it worse
-    if (values.size() >= 2 && values[0] < values[1]) {
-      std::swap(values[0], values[1]);
+    for (size_t i = 0; i < values.size()-1; i++) {
+      if (values.size() >= 2 && values[i] < values[i+1]) {
+        std::swap(values[i], values[i+1]);
+      }
     }
     return values;
   };
@@ -31,7 +35,7 @@ TEST_CASE("Adaptive weights favor successful operators", "[adaptive]") {
     .threads = 1,
     .minPopulationSize = 1,
     .maxPopulationSize = 10,
-    .maxSolutionCount = 50,
+    .maxNonImprovingSolutionCount = 10,
     .threadConfig = {
       .spawn = spawnReverse,
       .adaptationRate = 0.1,
@@ -68,8 +72,10 @@ TEST_CASE("Zero adaptation rate keeps weights constant", "[adaptive]") {
   auto goodOperator = []([[maybe_unused]] auto* eva, const std::vector<std::shared_ptr<const Permutation>>& parents) -> Values {
     Values values = parents[0]->values;
     // Swap first two if out of order - makes it better
-    if (values.size() >= 2 && values[0] > values[1]) {
-      std::swap(values[0], values[1]);
+    for (size_t i = 0; i < values.size()-1; i++) {
+      if (values.size() >= 2 && values[i] > values[i+1]) {
+        std::swap(values[i], values[i+1]);
+      }
     }
     return values;
   };
@@ -77,8 +83,10 @@ TEST_CASE("Zero adaptation rate keeps weights constant", "[adaptive]") {
   auto badOperator = []([[maybe_unused]] auto* eva, const std::vector<std::shared_ptr<const Permutation>>& parents) -> Values {
     Values values = parents[0]->values;
     // Swap first two if in order - makes it worse
-    if (values.size() >= 2 && values[0] < values[1]) {
-      std::swap(values[0], values[1]);
+    for (size_t i = 0; i < values.size()-1; i++) {
+      if (values.size() >= 2 && values[i] < values[i+1]) {
+        std::swap(values[i], values[i+1]);
+      }
     }
     return values;
   };
@@ -87,7 +95,7 @@ TEST_CASE("Zero adaptation rate keeps weights constant", "[adaptive]") {
     .threads = 1,
     .minPopulationSize = 1,
     .maxPopulationSize = 10,
-    .maxSolutionCount = 50,
+    .maxNonImprovingSolutionCount = 10,
     .threadConfig = {
       .spawn = spawnReverse,
       .adaptationRate = 0.0,  // No learning

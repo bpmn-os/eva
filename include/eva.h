@@ -89,6 +89,7 @@ public:
     size_t maxPopulationSize = 100; /// Maximum number of individuals in the population
     unsigned int maxComputationTime = std::numeric_limits<unsigned int>::max();  /// Time limit in seconds
     unsigned int maxSolutionCount = std::numeric_limits<unsigned int>::max();  /// Maximum number of solutions to be generated before termination 
+    unsigned int maxNewSolutionCount = std::numeric_limits<unsigned int>::max();  /// Maximum number of non-duplicate solutions to be generated before termination 
     unsigned int maxNonImprovingSolutionCount = std::numeric_limits<unsigned int>::max(); /// Maximum number of solutions without improvement to be generated before termination 
     ThreadConfig threadConfig = {}; /// Default configuration for the threads 
     std::function<bool(EVA*)> termination = nullptr; /// Custom termination function
@@ -145,7 +146,21 @@ public:
   /// Adds an evaluated individual to the population without exceeding the maximum population size
   void add( std::shared_ptr< const Individual > individual, Fitness fitness ) {
     auto lock = acquireLock();
+
+    bool duplicate = false;
+    if ( fitness <= getBest(true).second ) {   
+      for ( auto& [other_individual,other_fitness] : population ) {
+        if ( other_fitness == fitness && *other_individual == *individual ) {
+          duplicate = true;
+          break;
+        }
+      }
+    }
+
     solutionCount++;
+    if ( !duplicate ) {
+      newSolutionCount++;
+    }
     if ( fitness > getBest(true).second ) {
       nonImprovingSolutionCount = 0;      
     }
@@ -162,16 +177,6 @@ public:
       config->monitor( this, individual, fitness );
     }
     
-    
-    bool duplicate = false;
-    if ( fitness <= getBest(true).second ) {   
-      for ( auto& [other_individual,other_fitness] : population ) {
-        if ( other_fitness == fitness && *other_individual == *individual ) {
-          duplicate = true;
-          break;
-        }
-      }
-    }
     if ( !duplicate ) {
       if ( population.size() < config->maxPopulationSize ) {
         // add individual to population
@@ -228,6 +233,7 @@ public:
   void run() {
     auto config = getConfig();
     solutionCount = 0;
+    newSolutionCount = 0;
     nonImprovingSolutionCount = 0;
     if ( config->maxComputationTime == std::numeric_limits<unsigned int>::max() ) {
       terminationTime = std::chrono::time_point<std::chrono::system_clock>::max();
@@ -358,6 +364,7 @@ public:
 
   static size_t getThreadIndex() { return threadIndex; };
   unsigned int getSolutionCount() const { return solutionCount; };
+  unsigned int getNewSolutionCount() const { return newSolutionCount; };
   unsigned int getNonImprovingSolutionCount() const { return nonImprovingSolutionCount; };
 protected:
   std::shared_ptr<Config> globalConfig;
@@ -373,6 +380,7 @@ protected:
   static thread_local std::vector<double> weights;
   static thread_local double totalWeight;
   std::atomic<unsigned int> solutionCount;
+  std::atomic<unsigned int> newSolutionCount;
   std::atomic<unsigned int> nonImprovingSolutionCount;
   std::chrono::time_point<std::chrono::system_clock> terminationTime;
   std::atomic<bool> terminate;
@@ -437,6 +445,7 @@ protected:
       }
       if (
         solutionCount >= config->maxSolutionCount ||
+        newSolutionCount >= config->maxNewSolutionCount ||
         nonImprovingSolutionCount >= config->maxNonImprovingSolutionCount ||
         std::chrono::system_clock::now() >= terminationTime ||
         ( config->termination && config->termination( this ) )
