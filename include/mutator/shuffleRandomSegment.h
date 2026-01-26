@@ -19,7 +19,7 @@ std::function<Genome(EvolutionaryAlgorithm<Individual,Genome>*, const std::vecto
     auto size = genome.size();
 
     if (size < 2) {
-      throw std::logic_error("shuffleRandomSegment: genome must have a length > 2");
+      throw std::logic_error("shuffleRandomSegment: genome must have a length of at least 2");
     }
 
     // Randomly shuffle all element between (and including) two elements in the genome

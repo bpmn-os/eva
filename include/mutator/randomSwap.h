@@ -19,7 +19,7 @@ std::function<Genome(EvolutionaryAlgorithm<Individual,Genome>*, const std::vecto
     auto size = genome.size();
 
     if (size < 2) {
-      throw std::logic_error("randomSwap: genome must have a length > 2");
+      throw std::logic_error("randomSwap: genome must have a length of at least 2");
     }
 
     // Randomly swap two elements in the genome
@@ -30,14 +30,9 @@ std::function<Genome(EvolutionaryAlgorithm<Individual,Genome>*, const std::vecto
       j = eva->randomIndex( size );
     }
 
-    if constexpr (std::ranges::random_access_range<Genome>) {
-      std::ranges::swap(mutant[i], mutant[j]);
-    }
-    else {
-      auto it1 = std::ranges::next(mutant.begin(), i);
-      auto it2 = std::ranges::next(mutant.begin(), j);
-      std::ranges::swap(*it1,*it2);
-    }
+    auto it1 = std::ranges::next(mutant.begin(), i);
+    auto it2 = std::ranges::next(mutant.begin(), j);
+    std::ranges::swap(*it1,*it2);
 
     return mutant;
   };

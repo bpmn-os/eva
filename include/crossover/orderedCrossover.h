@@ -32,7 +32,7 @@ std::cerr << "Error: " << individuals.size() << ": " << parent2.size() << " != "
       throw std::logic_error("orderedCrossover: parents must have the same length");
     }
     if ( size < 2 ) {
-      throw std::logic_error("orderedCrossover: parents must have a length > 1");
+      throw std::logic_error("orderedCrossover: parents must have a length of at least 2");
     }
 
     // Randomly determine two positions
