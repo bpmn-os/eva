@@ -1,4 +1,4 @@
-TEST_CASE("Adaptive weights favor successful operators", "[adaptive]") {
+TEST_CASE("Adaptive weights favor successful operators", "[calibration]") {
   auto weights = std::vector<double>{1.0, 1.0};
 
   // Custom spawn: creates reverse-ordered permutations (worst fitness)
@@ -43,7 +43,7 @@ TEST_CASE("Adaptive weights favor successful operators", "[adaptive]") {
         { EVA::randomSelection<Permutation, Values>(), 1, goodOperator, 1.0 },  // Good
         { EVA::randomSelection<Permutation, Values>(), 1, badOperator, 1.0 }    // Bad
       },
-      .adaptation = [&weights](auto* eva, const auto& offspring, size_t reproducer, const auto& fitness, bool isDuplicate, bool isFittest) {
+      .calibration = [&weights](auto* eva, const auto& offspring, size_t reproducer, const auto& fitness, bool isDuplicate, bool isFittest) {
         // Apply default weight update
         EVA::weightUpdate<Permutation, Values>()(eva, offspring, reproducer, fitness, isDuplicate, isFittest);
         // Capture weights for test verification
@@ -60,7 +60,7 @@ TEST_CASE("Adaptive weights favor successful operators", "[adaptive]") {
   REQUIRE(weights[0] > weights[1]);
 }
 
-TEST_CASE("Zero adaptation rate keeps weights constant", "[adaptive]") {
+TEST_CASE("Zero adaptation rate keeps weights constant", "[calibration]") {
   auto weights = std::vector<double>{1.0, 1.0};
 
   // Custom spawn: creates reverse-ordered permutations (worst fitness)
@@ -105,7 +105,7 @@ TEST_CASE("Zero adaptation rate keeps weights constant", "[adaptive]") {
         { EVA::randomSelection<Permutation, Values>(), 1, goodOperator, 1.0 },  // Good
         { EVA::randomSelection<Permutation, Values>(), 1, badOperator, 1.0 }    // Bad
       },
-      .adaptation = [&weights](auto* eva, const auto& offspring, size_t reproducer, const auto& fitness, bool isDuplicate, bool isFittest) {
+      .calibration = [&weights](auto* eva, const auto& offspring, size_t reproducer, const auto& fitness, bool isDuplicate, bool isFittest) {
         // Apply default weight update (with zero adaptation rate, should not change)
         EVA::weightUpdate<Permutation, Values>()(eva, offspring, reproducer, fitness, isDuplicate, isFittest);
         // Capture weights for test verification

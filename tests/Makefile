@@ -16,7 +16,7 @@ $(CATCH2_HEADER):
 	@echo "Downloading Catch2..."
 	@wget -q $(CATCH2_URL) -O $(CATCH2_HEADER) || curl -s $(CATCH2_URL) -o $(CATCH2_HEADER)
 
-$(TEST_EXEC): main.cpp sorting.cpp reconfiguration.cpp adaptiveness.cpp $(CATCH2_HEADER)
+$(TEST_EXEC): main.cpp sorting.cpp reconfiguration.cpp calibration.cpp $(CATCH2_HEADER)
 	$(CXX) $(CXXFLAGS) -o $@ main.cpp $(LDFLAGS)
 
 run: $(TEST_EXEC)

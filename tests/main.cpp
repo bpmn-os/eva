@@ -10,7 +10,7 @@
 #include <mutator/randomSwap.h>
 #include <incubator/constructor.h>
 #include <evaluator/fitnessFunction.h>
-#include <adaptation/weightUpdate.h>
+#include <calibration/weightUpdate.h>
 
 // Test problem: sort a permutation of integers
 // Genome type represents the genetic material (vector of integers)
@@ -44,4 +44,4 @@ struct Permutation {
 // Include all test files
 #include "sorting.cpp"
 #include "reconfiguration.cpp"
-#include "adaptiveness.cpp"
+#include "calibration.cpp"

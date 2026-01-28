@@ -40,7 +40,7 @@ public:
   /**
    * @brief Configuration for thread-specific evolutionary operators
    *
-   * Defines genetic operators (spawn, selection, reproduction) and adaptation settings
+   * Defines genetic operators (spawn, selection, reproduction) and calibration settings
    * for a single thread. Threads can have different configurations to explore the
    * search space using different strategies simultaneously.
    *
@@ -77,7 +77,7 @@ public:
     > > reproduction = {};
 
     /// Adaptive learning callback: updates weights based on offspring feedback
-    std::function<void(EVA*, const std::shared_ptr<const Individual>&, size_t reproducer, const Fitness&, bool isDuplicate, bool isFittest)> adaptation = nullptr;
+    std::function<void(EVA*, const std::shared_ptr<const Individual>&, size_t reproducer, const Fitness&, bool isDuplicate, bool isFittest)> calibration = nullptr;
   };
 
   struct Config {
@@ -184,7 +184,7 @@ public:
     return orderedIndices;
   }
 
-  // Thread-local adaptive weights (public for adaptation callbacks)
+  // Thread-local weights
   static thread_local std::vector<double> weights;
   static thread_local double totalWeight;
 
@@ -472,9 +472,9 @@ protected:
         continue;
       }
 
-      // Call adaptation callback with feedback info
-      if (threadConfig->adaptation) {
-        threadConfig->adaptation(this, offspring, reproducer, fitness, isDuplicate, isFittest);
+      // Call calibration callback with feedback info
+      if (threadConfig->calibration) {
+        threadConfig->calibration(this, offspring, reproducer, fitness, isDuplicate, isFittest);
       }
 
       createdOffspring.pop_front();

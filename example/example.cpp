@@ -9,7 +9,7 @@
 #include "../include/incubator/constructor.h"
 #include "../include/evaluator/fitnessFunction.h"
 #include "../include/spawn/randomPermutation.h"
-#include "../include/adaptation/weightUpdate.h"
+#include "../include/calibration/weightUpdate.h"
 
 #include <iostream>
 
@@ -91,7 +91,7 @@ int main(int argc, char** argv) {
         { EVA::binaryTournamentSelection<Permutation, Values>(), 1, EVA::shuffleRandomSegment<Permutation, Values>(), 1.0 },
         { EVA::randomSelection<Permutation, Values>(), 1, EVA::swapRandomSegments<Permutation, Values>(), 1.0 }
       },
-      .adaptation = EVA::weightUpdate<Permutation, Values>()  // Use default adaptive weight update
+      .calibration = EVA::weightUpdate<Permutation, Values>()  // Use default adaptive weight update
     },
     .incubate = EVA::constructor<Permutation, Values>(),
     .evaluate = EVA::fitnessFunction<Permutation, Values>(),
