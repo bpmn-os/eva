@@ -83,21 +83,21 @@ int main(int argc, char** argv) {
         { EVA::binaryTournamentSelection<Permutation, Values>(), 2, EVA::orderedCrossover<Permutation, Values>(), 1.0 },
         { EVA::rankSelection<Permutation, Values>(), 1, EVA::randomSwap<Permutation, Values>(), 1.0 },
         { EVA::randomSelection<Permutation, Values>(), 1, EVA::shuffleRandomSegment<Permutation, Values>(), 1.0 }
-      },
-      .incubate = EVA::constructor<Permutation, Values>(),
-      .evaluate = EVA::fitnessFunction<Permutation, Values>()
-/*
-      // create lambda
-      .evaluate = []( [[maybe_unused]] const EVA::EvolutionaryAlgorithm< Permutation, Values >* eva, const std::shared_ptr< const Permutation >& permutation ) { 
-        return permutation->getFitness(); 
       }
-*/
     },
+    .incubate = EVA::constructor<Permutation, Values>(),
+    .evaluate = EVA::fitnessFunction<Permutation, Values>(),
+/*
+    // create lambda
+    .evaluate = []( [[maybe_unused]] const EVA::EvolutionaryAlgorithm< Permutation, Values >* eva, const std::shared_ptr< const Permutation >& permutation ) {
+      return permutation->getFitness();
+    },
+*/
     // create lambda
     .termination = []( [[maybe_unused]] EVA::EvolutionaryAlgorithm< Permutation, Values >* eva) {
       auto [bestPermutation, bestFitness] = eva->getBest();
       // return true if best permutation is perfectly ordered
-      return ( bestFitness[0] > 1 - 1e-10 ); 
+      return ( bestFitness[0] > 1 - 1e-10 );
     },
     // create lambda
     .monitor = []( [[maybe_unused]] EVA::EvolutionaryAlgorithm< Permutation, Values >* eva, const std::shared_ptr< const Permutation >& permutation, const EVA::Fitness& fitness) {

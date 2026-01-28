@@ -1,6 +1,32 @@
 # EVA - Evolutionary Algorithm
 
-This C++ header-only library provides an implementation of an evolutionary algorithm for use cases in which genomes only provide a partial representation of individuals in the population and the generation of individuals from a genome is computationally expensive. The implementation is multi-threaded and each new individual created is immediately added to the population, directly replacing the worst individual.
+This C++ header-only library provides an implementation of an evolutionary algorithm for use cases in which genomes only provide a partial representation of individuals in the population and the generation of individuals from a genome is computationally expensive. The implementation uses a multi-threaded queue-based architecture where worker threads generate offspring and a main thread evaluates them and manages the population.
+
+## Architecture
+
+The library uses a **producer-consumer** architecture to minimize lock contention and maximize scalability:
+
+### Worker Threads (Producers)
+- **Selection**: Choose parent individuals from population (requires brief lock)
+- **Reproduction**: Apply genetic operators (crossover/mutation) to create `Genome`
+- **Incubation**: Transform `Genome` into `Individual`
+- **Queue**: Add unevaluated `Individual` to thread-safe queue
+
+### Main Thread (Consumer)
+- **Evaluation**: Compute fitness for queued individuals
+- **Duplicate Detection**: Check if individual already exists in population
+- **Population Management**: Insert new individuals or replace worst
+- **Termination**: Check stopping conditions and signal workers
+- **Monitoring**: Invoke user callbacks with new solutions
+
+### Queue Processing
+The main thread processes individuals in batches controlled by `initiationFrequency` (default: 10). This reduces context switching while maintaining responsiveness. Set to 1 for immediate processing (useful for testing with strict termination conditions).
+
+### Benefits
+- **Reduced Lock Contention**: Workers only lock population briefly during selection
+- **Centralized Evaluation**: All fitness computation happens in one thread
+- **Scalability**: Near-linear scaling with thread count
+- **Clean Separation**: Genetic operations (workers) vs. population management (main thread)
 
 ## Core Concepts - `Individual` and `Genome`
 
@@ -23,37 +49,73 @@ Controls algorithm-wide settings:
   * `maxSolutionCount`: Stop after generating this many solutions
   * `maxComputationTime`: Maximum runtime in seconds
   * `maxNonImprovingSolutionCount`: Stop after this many solutions without improvement
+  * `initiationFrequency`: Process queue when it contains this many pending individuals (default: 10)
   * `threadConfig`: Default configuration for all threads
+  * `incubate`: Transforms `Genome` to `Individual`: `Individual(EVA*, const Genome&)`
+  * `evaluate`: Assigns fitness to `Individual`: `Fitness(EVA*, const Individual&)`
   * `termination`: Callback to check if algorithm should stop `bool(EVA*)`
   * `monitor`: Callback invoked for each new solution `void(EVA*, const Individual&, const Fitness&)`
 
 > [!IMPORTANT]
 > **Threading and Locking:**
-> - Both `termination` and `monitor` are **called from worker threads**
-> - If you access your own variables (captured by reference), protect them with locks or atomics
-> - `monitor` is called while **population is already locked** - safe to call `getPopulation()`, `getBest()`, `getWorst()` without additional locking
+> - `termination` is called from the **main thread** after processing each batch of individuals
+> - `monitor` is called from the **main thread** while **population is already locked** - safe to call `getPopulation()`, `getBest()`, `getWorst()` without additional locking
+> - If callbacks access external variables (captured by reference), protect them with locks or atomics if worker threads might access them
 
 ### Thread Configuration (`ThreadConfig`)
 
 Defines genetic operators per thread (each thread can have different strategies):
 
-  * `spawn`: Creates initial individuals `pair<Individual, Fitness>(EVA*)`
-  * `adaptationRate`: Rate for adaptive selection of reproduction strategy
+  * `spawn`: Creates initial genomes `Genome(EVA*)`
+  * `adaptationRate`: Rate for adaptive selection of reproduction strategy (currently disabled)
   * `reproduction`: Vector of reproduction strategies, each containing:
     - Selection function: chooses parent(s) `Individual(EVA*)`
     - Parent count: number of parents required
     - Reproduction operator: creates offspring `Genome(EVA*, vector<Individual>&)`
     - Initial weight: starting probability weight
-  * `incubate`: Transforms `Genome` to `Individual`: `Individual(EVA*, const Genome&)`
-  * `evaluate`: Assigns fitness to `Individual`: `Fitness(EVA*, const Individual&)`
 
 **Adaptive Operator Selection:**
-When multiple reproduction strategies are provided, the algorithm uses roulette wheel selection based on operator weights. The weights are updated after each reproduction based on the offspring's fitness:
-  - Successful operators (producing fit offspring) get their weights increased
-  - The `adaptationRate` controls how quickly weights adapt (0.0 = no adaptation)
-  - Weights are **thread-local** - each thread learns independently which operators work best
+When multiple reproduction strategies are provided, the algorithm uses roulette wheel selection based on operator weights. *(Note: Weight adaptation is currently disabled and under redesign)*
+  - The `adaptationRate` parameter is reserved for future use
+  - Weights are **thread-local** - each thread can learn independently which operators work best
   - Access current weights via `getWeights()` from within callbacks (only callable from worker threads)
 
+
+## Workflow
+
+### Initial Population Seeding
+1. Worker threads call `spawn()` to generate initial `Genome` objects
+2. Workers call `incubate()` to transform genomes into `Individual` objects
+3. Workers add unevaluated individuals to queue
+4. Main thread evaluates individuals and adds them to population
+5. Process continues until `minPopulationSize` is reached
+
+### Evolution Loop
+1. **Worker threads** (in parallel):
+   - Select parent(s) from population
+   - Apply reproduction operator to create offspring `Genome`
+   - Incubate `Genome` into `Individual`
+   - Add unevaluated individual to queue
+   - Check `terminate` flag and exit if set
+
+2. **Main thread**:
+   - Wait for queue to reach `initiationFrequency` size
+   - Extract batch of individuals from queue
+   - For each individual:
+     - Evaluate fitness
+     - Check for duplicates
+     - Insert into population (or replace worst if full)
+     - Invoke `monitor` callback
+   - Check termination conditions
+   - Set `terminate` flag if stopping criteria met
+   - Continue until all workers finish and queue is empty
+
+### Termination
+- Main thread checks conditions after processing each batch: `maxSolutionCount`, `maxNewSolutionCount`, `maxNonImprovingSolutionCount`, `maxComputationTime`, or custom `termination` callback
+- When condition met, main thread sets `terminate = true`
+- Workers detect flag and exit their loops
+- Main thread processes remaining queued individuals
+- Algorithm returns when all workers finish and queue is empty
 
 ## Example
 

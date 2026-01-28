@@ -4,18 +4,14 @@ TEST_CASE("Reconfiguration before run", "[reconfiguration]") {
     .reproduction = {
       { EVA::binaryTournamentSelection<Permutation, Values>(), 2, EVA::orderedCrossover<Permutation, Values>(), 1.0 },
       { EVA::randomSelection<Permutation, Values>(), 2, EVA::orderedCrossover<Permutation, Values>(), 1.0 }
-    },
-    .incubate = EVA::constructor<Permutation, Values>(),
-    .evaluate = EVA::fitnessFunction<Permutation, Values>()
+    }
   };
 
   EVA::EvolutionaryAlgorithm<Permutation, Values>::ThreadConfig alternativeConfig = {
     .spawn = EVA::randomPermutation<Permutation, Values>(5),
     .reproduction = {
-      { EVA::randomSelection<Permutation, Values>(), 1, EVA::randomSwap<Permutation, Values>(), 1.0 }  
-    },
-    .incubate = EVA::constructor<Permutation, Values>(),
-    .evaluate = EVA::fitnessFunction<Permutation, Values>()
+      { EVA::randomSelection<Permutation, Values>(), 1, EVA::randomSwap<Permutation, Values>(), 1.0 }
+    }
   };
 
   EVA::EvolutionaryAlgorithm<Permutation, Values> eva({
@@ -24,7 +20,9 @@ TEST_CASE("Reconfiguration before run", "[reconfiguration]") {
     .maxPopulationSize = 10,
     .maxSolutionCount = 10,
     .initiationFrequency = 1,
-    .threadConfig = defaultConfig
+    .threadConfig = defaultConfig,
+    .incubate = EVA::constructor<Permutation, Values>(),
+    .evaluate = EVA::fitnessFunction<Permutation, Values>()
   });
 
   REQUIRE_NOTHROW(eva.setThreadConfig(1, alternativeConfig));  // Re-configure thread 1
@@ -43,21 +41,17 @@ TEST_CASE("Self-reconfiguration during run", "[reconfiguration]") {
     .reproduction = {
       { EVA::binaryTournamentSelection<Permutation, Values>(), 2, EVA::orderedCrossover<Permutation, Values>(), 1.0 },
       { EVA::randomSelection<Permutation, Values>(), 2, EVA::orderedCrossover<Permutation, Values>(), 1.0 }
-    },
-    .incubate = EVA::constructor<Permutation, Values>(),
-    .evaluate = EVA::fitnessFunction<Permutation, Values>()
+    }
   };
 
   EVA::EvolutionaryAlgorithm<Permutation, Values>::ThreadConfig alternativeConfig = {
-    .spawn = [&defaultConfig](auto* eva) -> std::pair<std::shared_ptr<const Permutation>, EVA::Fitness> {
+    .spawn = [&defaultConfig](auto* eva) -> Values {
       eva->setThreadConfig(defaultConfig);  // Reconfigure to defaultConfig
       return EVA::randomPermutation<Permutation, Values>(5)(eva);
     },
     .reproduction = {
       { EVA::randomSelection<Permutation, Values>(), 1, EVA::randomSwap<Permutation, Values>(), 1.0 }
-    },
-    .incubate = EVA::constructor<Permutation, Values>(),
-    .evaluate = EVA::fitnessFunction<Permutation, Values>()
+    }
   };
 
   EVA::EvolutionaryAlgorithm<Permutation, Values> eva({
@@ -66,7 +60,9 @@ TEST_CASE("Self-reconfiguration during run", "[reconfiguration]") {
     .maxPopulationSize = 10,
     .maxSolutionCount = 10,
     .initiationFrequency = 1,
-    .threadConfig = defaultConfig
+    .threadConfig = defaultConfig,
+    .incubate = EVA::constructor<Permutation, Values>(),
+    .evaluate = EVA::fitnessFunction<Permutation, Values>()
   });
 
   REQUIRE_NOTHROW(eva.setThreadConfig(1, alternativeConfig));  // Re-configure thread 1

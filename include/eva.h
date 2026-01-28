@@ -51,8 +51,8 @@ public:
   struct ThreadConfig {
     using EVA = EvolutionaryAlgorithm<Individual, Genome>;
 
-    /// Function to create initial individuals (used during population seeding)
-    std::function<std::pair< std::shared_ptr< const Individual >, Fitness >(EVA*)> spawn = nullptr;
+    /// Function to create initial genomes (used during population seeding)
+    std::function<Genome(EVA*)> spawn = nullptr;
 
     /**
      * @brief Learning rate for adaptive operator selection (0.0 = no learning, 1.0 = instant)
@@ -75,12 +75,6 @@ public:
       std::function<Genome(EVA*, const std::vector< std::shared_ptr< const Individual > >&)>, // reproduction
       double // initial weight
     > > reproduction = {};
-
-    /// Function to transform a genome into a complete individual
-    std::function<std::shared_ptr< const Individual >(EVA*, const Genome&)> incubate = nullptr;
-
-    /// Function to compute fitness for an individual
-    std::function<Fitness(EVA*, const std::shared_ptr< const Individual >&)> evaluate = nullptr;
   };
 
   struct Config {
@@ -94,7 +88,11 @@ public:
     unsigned int maxNewSolutionCount = std::numeric_limits<unsigned int>::max();  /// Maximum number of non-duplicate solutions to be generated before termination 
     unsigned int maxNonImprovingSolutionCount = std::numeric_limits<unsigned int>::max(); /// Maximum number of solutions without improvement to be generated before termination
     size_t initiationFrequency = 10; /// Process queue when it contains this many pending individuals
-    ThreadConfig threadConfig = {}; /// Default configuration for the threads 
+    ThreadConfig threadConfig = {}; /// Default configuration for the threads
+    /// Function to transform a genome into a complete individual
+    std::function<std::shared_ptr< const Individual >(EVA*, const Genome&)> incubate = nullptr;
+    /// Function to compute fitness for an individual
+    std::function<Fitness(EVA*, const std::shared_ptr< const Individual >&)> evaluate = nullptr;
     std::function<bool(EVA*)> termination = nullptr; /// Custom termination function
     std::function<void(EVA*, const std::shared_ptr< const Individual >&, const Fitness&)> monitor = nullptr; /// Callback allowing to monitor the progress of the algorithm (note: the population is locked while the callback is executed)
   };
@@ -128,10 +126,10 @@ public:
     if ( config.threadConfig.reproduction.empty() ) {
       throw std::logic_error("EvolutionaryAlgorithm: reproduction operator(s) missing");
     }
-    if ( !config.threadConfig.incubate ) {
+    if ( !config.incubate ) {
       throw std::logic_error("EvolutionaryAlgorithm: incubator missing");
     }
-    if ( !config.threadConfig.evaluate ) {
+    if ( !config.evaluate ) {
       throw std::logic_error("EvolutionaryAlgorithm: evaluator missing");
     }
     
@@ -146,11 +144,11 @@ public:
     
   };
 
-  /// Adds an evaluated individual to the queue for population management
-  void add( std::shared_ptr< const Individual > individual, Fitness fitness ) {
+  /// Adds an unevaluated individual to the queue for population management
+  void add( std::shared_ptr< const Individual > individual ) {
     {
       std::lock_guard lock(queueMutex);
-      pendingOffspring.emplace_back(std::move(individual), std::move(fitness));
+      pendingOffspring.emplace_back(std::move(individual));
     }
     // Always notify main thread (let it decide whether to process)
     pendingWork.notify_one();
@@ -229,7 +227,7 @@ public:
       });
 
       // Extract all queued entries (already holding lock)
-      std::deque<std::pair<std::shared_ptr<const Individual>, Fitness>> novices;
+      std::deque<std::shared_ptr<const Individual>> novices;
       novices.swap(pendingOffspring);  // O(1) swap, pendingOffspring becomes empty
       lock.unlock();
 
@@ -383,18 +381,21 @@ protected:
   std::chrono::time_point<std::chrono::system_clock> terminationTime;
   std::atomic<bool> terminate;
   std::atomic<bool> threadsRunning{false};
-  // Queue for pending individuals
-  std::deque<std::pair<std::shared_ptr<const Individual>, Fitness>> pendingOffspring;
+  // Queue for pending unevaluated individuals
+  std::deque<std::shared_ptr<const Individual>> pendingOffspring;
   mutable std::mutex queueMutex;
   std::condition_variable pendingWork;
   std::atomic<size_t> activeWorkers{0};
 
-  void initiate(const std::pair<std::shared_ptr<const Individual>, Fitness>& novice) {
+  void initiate(const std::shared_ptr<const Individual>& individual) {
+    auto config = getConfig();
+
+    // Evaluate individual (main thread responsibility)
+    Fitness fitness = config->evaluate(this, individual);
+
     auto lock = acquireLock();  // Lock population
 
-    const auto& [individual, fitness] = novice;
-
-    // Duplicate checking (same as current add() logic)
+    // Duplicate checking
     bool duplicate = false;
     if (fitness <= getBest(true).second) {
       for (auto& [other_individual, other_fitness] : population) {
@@ -418,7 +419,6 @@ protected:
     }
 
     // Monitor callback
-    auto config = getConfig();
     if (config->monitor) {
       config->monitor(this, individual, fitness);
     }
@@ -446,18 +446,19 @@ protected:
     auto threadConfig = getThreadConfig();
     initializeWeights(threadConfig);
 
-    while ( population.size() < config->minPopulationSize ) {
+    while ( population.size() < config->minPopulationSize && !terminate ) {
       // update to latest config
       threadConfig = getThreadConfig();
-      // spawn individual
-      auto [ individual, fitness ] = threadConfig->spawn( this );
-      // add individual
-      add( individual, fitness );
+      // spawn genome
+      auto genome = threadConfig->spawn( this );
+      // incubate into individual
+      auto individual = config->incubate( this, genome );
+      // add individual (main thread will evaluate)
+      add( individual );
     }
 
     do {
       threadConfig = getThreadConfig();
-      Fitness fitness;
       auto weightThreshold = randomProbability() * totalWeight;
       double cumulativeWeight = 0.0;
       for ( unsigned int i = 0; i < threadConfig->reproduction.size(); i++ ) {
@@ -485,12 +486,12 @@ protected:
             }
             individuals.push_back( individual );
           }
-          
+
           if (individuals.size() == requiredIndividuals) {
-            auto offspring = threadConfig->incubate( this, reproduction( this, individuals ) );
-            fitness = threadConfig->evaluate( this, offspring );
-            updateWeights( weights[i], threadConfig->adaptationRate, fitness );
-            add( offspring, fitness );
+            auto offspring = config->incubate( this, reproduction( this, individuals ) );
+            // No evaluation - main thread will evaluate
+//            updateWeights( weights[i], threadConfig->adaptationRate, fitness );
+            add( offspring );
             break;
           }
         }

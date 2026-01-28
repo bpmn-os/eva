@@ -16,7 +16,7 @@ requires (
     requires(Genome genome, typename Genome::value_type value) { { genome.push_back(value) }; } 
   )
 )
-std::function<std::pair< std::shared_ptr< const Individual >, Fitness >(EvolutionaryAlgorithm<Individual, Genome>*)> 
+std::function<Genome(EvolutionaryAlgorithm<Individual, Genome>*)>
 randomPermutation(size_t length) {
   return [length](EvolutionaryAlgorithm<Individual, Genome>* eva) {
     std::vector<typename Genome::value_type> permutation(length);
@@ -26,17 +26,14 @@ randomPermutation(size_t length) {
     Genome genome;
     if constexpr (std::ranges::random_access_range<Genome>) {
       genome = Genome(permutation.begin(), permutation.end());
-    } 
+    }
     else {
       for (auto& v : permutation) {
         genome.push_back(v);
       }
     }
 
-    auto threadConfig = eva->getThreadConfig();
-    auto individual = threadConfig->incubate(eva, genome);
-    auto fitness = threadConfig->evaluate(eva, individual);
-    return std::make_pair(individual, fitness);
+    return genome;
   };
 }
 
