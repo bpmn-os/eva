@@ -5,9 +5,11 @@
 #include "../include/crossover/orderedCrossover.h"
 #include "../include/mutator/randomSwap.h"
 #include "../include/mutator/shuffleRandomSegment.h"
+#include "../include/mutator/swapRandomSegments.h"
 #include "../include/incubator/constructor.h"
 #include "../include/evaluator/fitnessFunction.h"
 #include "../include/spawn/randomPermutation.h"
+#include "../include/adaptation/weightUpdate.h"
 
 #include <iostream>
 
@@ -79,11 +81,17 @@ int main(int argc, char** argv) {
     .threadConfig = {
       // use default implementations
       .spawn = EVA::randomPermutation<Permutation, Values>(length),
+      .adaptationRate = 0.1,  // Enable adaptive learning
       .reproduction = {
+        // Crossover with different selection strategies
         { EVA::binaryTournamentSelection<Permutation, Values>(), 2, EVA::orderedCrossover<Permutation, Values>(), 1.0 },
+        { EVA::rankSelection<Permutation, Values>(), 2, EVA::orderedCrossover<Permutation, Values>(), 1.0 },
+        // Mutations with different selection strategies
         { EVA::rankSelection<Permutation, Values>(), 1, EVA::randomSwap<Permutation, Values>(), 1.0 },
-        { EVA::randomSelection<Permutation, Values>(), 1, EVA::shuffleRandomSegment<Permutation, Values>(), 1.0 }
-      }
+        { EVA::binaryTournamentSelection<Permutation, Values>(), 1, EVA::shuffleRandomSegment<Permutation, Values>(), 1.0 },
+        { EVA::randomSelection<Permutation, Values>(), 1, EVA::swapRandomSegments<Permutation, Values>(), 1.0 }
+      },
+      .adaptation = EVA::weightUpdate<Permutation, Values>()  // Use default adaptive weight update
     },
     .incubate = EVA::constructor<Permutation, Values>(),
     .evaluate = EVA::fitnessFunction<Permutation, Values>(),

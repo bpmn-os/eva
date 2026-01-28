@@ -2,11 +2,10 @@ TEST_CASE("Adaptive weights favor successful operators", "[adaptive]") {
   auto weights = std::vector<double>{1.0, 1.0};
 
   // Custom spawn: creates reverse-ordered permutations (worst fitness)
-  auto spawnReverse = []([[maybe_unused]] auto* eva) -> std::pair<std::shared_ptr<const Permutation>, EVA::Fitness> {
+  auto spawnReverse = []([[maybe_unused]] auto* eva) -> Values {
     Values values(5);
     std::iota(values.rbegin(), values.rend(), 0);  // [4,3,2,1,0]
-    auto individual = std::make_shared<const Permutation>(values);
-    return {individual, individual->getFitness()};
+    return values;
   };
 
   auto goodOperator = []([[maybe_unused]] auto* eva, const std::vector<std::shared_ptr<const Permutation>>& parents) -> Values {
@@ -35,7 +34,8 @@ TEST_CASE("Adaptive weights favor successful operators", "[adaptive]") {
     .threads = 1,
     .minPopulationSize = 1,
     .maxPopulationSize = 10,
-    .maxNonImprovingSolutionCount = 10,
+    .maxNonImprovingSolutionCount = 100,
+    .initiationFrequency = 1,
     .threadConfig = {
       .spawn = spawnReverse,
       .adaptationRate = 0.1,
@@ -43,13 +43,15 @@ TEST_CASE("Adaptive weights favor successful operators", "[adaptive]") {
         { EVA::randomSelection<Permutation, Values>(), 1, goodOperator, 1.0 },  // Good
         { EVA::randomSelection<Permutation, Values>(), 1, badOperator, 1.0 }    // Bad
       },
-      .incubate = EVA::constructor<Permutation, Values>(),
-      .evaluate = EVA::fitnessFunction<Permutation, Values>()
+      .adaptation = [&weights](auto* eva, const auto& offspring, size_t reproducer, const auto& fitness, bool isDuplicate, bool isFittest) {
+        // Apply default weight update
+        EVA::weightUpdate<Permutation, Values>()(eva, offspring, reproducer, fitness, isDuplicate, isFittest);
+        // Capture weights for test verification
+        weights = EVA::EvolutionaryAlgorithm<Permutation, Values>::weights;
+      }
     },
-    .monitor = [&weights](auto* eva, const auto&, const auto&) {
-      // Capture weights
-      weights = eva->getWeights(); // no-locking required as we have only 1 thread
-    }
+    .incubate = EVA::constructor<Permutation, Values>(),
+    .evaluate = EVA::fitnessFunction<Permutation, Values>()
   });
 
   REQUIRE_NOTHROW(eva.run());
@@ -62,11 +64,10 @@ TEST_CASE("Zero adaptation rate keeps weights constant", "[adaptive]") {
   auto weights = std::vector<double>{1.0, 1.0};
 
   // Custom spawn: creates reverse-ordered permutations (worst fitness)
-  auto spawnReverse = []([[maybe_unused]] auto* eva) -> std::pair<std::shared_ptr<const Permutation>, EVA::Fitness> {
+  auto spawnReverse = []([[maybe_unused]] auto* eva) -> Values {
     Values values(5);
     std::iota(values.rbegin(), values.rend(), 0);  // [4,3,2,1,0]
-    auto individual = std::make_shared<const Permutation>(values);
-    return {individual, individual->getFitness()};
+    return values;
   };
 
   auto goodOperator = []([[maybe_unused]] auto* eva, const std::vector<std::shared_ptr<const Permutation>>& parents) -> Values {
@@ -95,7 +96,8 @@ TEST_CASE("Zero adaptation rate keeps weights constant", "[adaptive]") {
     .threads = 1,
     .minPopulationSize = 1,
     .maxPopulationSize = 10,
-    .maxNonImprovingSolutionCount = 10,
+    .maxNonImprovingSolutionCount = 100,
+    .initiationFrequency = 1,
     .threadConfig = {
       .spawn = spawnReverse,
       .adaptationRate = 0.0,  // No learning
@@ -103,13 +105,15 @@ TEST_CASE("Zero adaptation rate keeps weights constant", "[adaptive]") {
         { EVA::randomSelection<Permutation, Values>(), 1, goodOperator, 1.0 },  // Good
         { EVA::randomSelection<Permutation, Values>(), 1, badOperator, 1.0 }    // Bad
       },
-      .incubate = EVA::constructor<Permutation, Values>(),
-      .evaluate = EVA::fitnessFunction<Permutation, Values>()
+      .adaptation = [&weights](auto* eva, const auto& offspring, size_t reproducer, const auto& fitness, bool isDuplicate, bool isFittest) {
+        // Apply default weight update (with zero adaptation rate, should not change)
+        EVA::weightUpdate<Permutation, Values>()(eva, offspring, reproducer, fitness, isDuplicate, isFittest);
+        // Capture weights for test verification
+        weights = EVA::EvolutionaryAlgorithm<Permutation, Values>::weights;
+      }
     },
-    .monitor = [&weights](auto* eva, const auto&, const auto&) {
-      // Capture normalised weights 
-      weights = eva->getWeights(); // no-locking required as we have only 1 thread
-    }
+    .incubate = EVA::constructor<Permutation, Values>(),
+    .evaluate = EVA::fitnessFunction<Permutation, Values>()
   });
 
   REQUIRE_NOTHROW(eva.run());

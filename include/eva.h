@@ -75,6 +75,9 @@ public:
       std::function<Genome(EVA*, const std::vector< std::shared_ptr< const Individual > >&)>, // reproduction
       double // initial weight
     > > reproduction = {};
+
+    /// Adaptive learning callback: updates weights based on offspring feedback
+    std::function<void(EVA*, const std::shared_ptr<const Individual>&, size_t reproducer, const Fitness&, bool isDuplicate, bool isFittest)> adaptation = nullptr;
   };
 
   struct Config {
@@ -135,9 +138,12 @@ public:
     
     threadConfigMutex.resize(config.threads);
     threadConfigs.resize(config.threads);
+    initiatedOffspring.resize(config.threads);
+    initiatedOffspringMutexes.resize(config.threads);
     for (size_t i = 0; i < config.threads; ++i) {
       threadConfigMutex[i] = std::make_unique< std::shared_mutex >();
       threadConfigs[i] = std::make_shared<ThreadConfig>(config.threadConfig);
+      initiatedOffspringMutexes[i] = std::make_unique< std::mutex >();
     }
 
     globalConfig = std::make_shared<Config>(std::move(config));
@@ -145,10 +151,10 @@ public:
   };
 
   /// Adds an unevaluated individual to the queue for population management
-  void add( std::shared_ptr< const Individual > individual ) {
+  void add( std::shared_ptr< const Individual > individual, size_t threadIndex ) {
     {
       std::lock_guard lock(queueMutex);
-      pendingOffspring.emplace_back(std::move(individual));
+      pendingOffspring.emplace_back(std::move(individual), threadIndex);
     }
     // Always notify main thread (let it decide whether to process)
     pendingWork.notify_one();
@@ -178,17 +184,9 @@ public:
     return orderedIndices;
   }
 
-  /**
-   * @brief Get current adaptive weights for reproduction strategies
-   * @return Normalized probabilities for each strategy (thread-local)
-   * @throws std::logic_error if called from main thread (outside worker threads)
-   */
-  [[nodiscard]] const std::vector<double>& getWeights() const {
-    if (getThreadIndex() == 0) {
-      throw std::logic_error("getWeights() can only be called from worker threads during run()");
-    }
-    return weights;
-  }
+  // Thread-local adaptive weights (public for adaptation callbacks)
+  static thread_local std::vector<double> weights;
+  static thread_local double totalWeight;
 
   void run() {
     auto config = getConfig();
@@ -202,7 +200,6 @@ public:
       terminationTime = std::chrono::system_clock::now()  + std::chrono::seconds(config->maxComputationTime);;
     }
     terminate = false;
-    threadsRunning = true;
     activeWorkers = config->threads;
     std::vector<std::jthread> workers;
 
@@ -227,13 +224,15 @@ public:
       });
 
       // Extract all queued entries (already holding lock)
-      std::deque<std::shared_ptr<const Individual>> novices;
+      std::deque<std::pair<std::shared_ptr<const Individual>, size_t>> novices;
       novices.swap(pendingOffspring);  // O(1) swap, pendingOffspring becomes empty
       lock.unlock();
 
-      // Process novices
-      for (auto& novice : novices) {
-        initiate(novice);
+      // Process novices one-by-one
+      while (!novices.empty()) {
+        auto [individual, threadIdx] = std::move(novices.front());
+        novices.pop_front();
+        initiate(individual, threadIdx);
       }
 
       // Check termination conditions (main thread has accurate counters)
@@ -249,7 +248,6 @@ public:
     }
 
     // Workers auto-join when jthreads are destroyed
-    threadsRunning = false;
   }
 
   /// Returns a lock guard for thread-safe access to the population
@@ -315,7 +313,7 @@ public:
    * For runtime reconfiguration, use setThreadConfig(config) without index.
    */
   void setThreadConfig(size_t index, ThreadConfig config) {
-    if (threadsRunning) {
+    if (activeWorkers > 0) {
       throw std::logic_error(
         "setThreadConfig(index, config) can only be called before run(). "
         "Use setThreadConfig(config) from within threads to reconfigure at runtime."
@@ -341,14 +339,13 @@ public:
    * Thread reinitializes its adaptive weights to match the new configuration.
    * Typically used from within callback functions.
    */
-  void setThreadConfig(ThreadConfig config, bool reinitializeWeights = false) {
+  void setThreadConfig(ThreadConfig config) {
     size_t index = getThreadIndex();
     if (index > 0) {
       std::unique_lock lock(*threadConfigMutex[index-1]);
       threadConfigs[index - 1] = std::make_shared<ThreadConfig>(std::move(config));
-      if ( reinitializeWeights ) {
-        initializeWeights(threadConfigs[index - 1]);  // Safe - our own weights
-      }
+      initializeWeights(threadConfigs[index - 1]);  // Always reinitialize weights
+      createdOffspring.clear();
     }
     else {
       std::unique_lock lock(globalConfigMutex);
@@ -373,21 +370,22 @@ protected:
   static thread_local std::mt19937 randomNumberGenerator;
   static thread_local size_t threadIndex;
   static thread_local bool lockAcquired;
-  static thread_local std::vector<double> weights;
-  static thread_local double totalWeight;
+  static thread_local std::deque<std::pair<std::shared_ptr<const Individual>, size_t>> createdOffspring;
   std::atomic<unsigned int> solutionCount;
   std::atomic<unsigned int> newSolutionCount;
   std::atomic<unsigned int> nonImprovingSolutionCount;
   std::chrono::time_point<std::chrono::system_clock> terminationTime;
   std::atomic<bool> terminate;
-  std::atomic<bool> threadsRunning{false};
-  // Queue for pending unevaluated individuals
-  std::deque<std::shared_ptr<const Individual>> pendingOffspring;
+  // Queue for pending unevaluated individuals with their source thread
+  std::deque<std::pair<std::shared_ptr<const Individual>, size_t>> pendingOffspring;
   mutable std::mutex queueMutex;
   std::condition_variable pendingWork;
   std::atomic<size_t> activeWorkers{0};
+  // Per-thread queues of initiated offspring: (individual, fitness, isDuplicate, isFittest)
+  std::vector<std::deque<std::tuple<std::shared_ptr<const Individual>, Fitness, bool, bool>>> initiatedOffspring;
+  std::vector<std::unique_ptr<std::mutex>> initiatedOffspringMutexes;
 
-  void initiate(const std::shared_ptr<const Individual>& individual) {
+  void initiate(const std::shared_ptr<const Individual>& individual, size_t threadIdx) {
     auto config = getConfig();
 
     // Evaluate individual (main thread responsibility)
@@ -395,26 +393,30 @@ protected:
 
     auto lock = acquireLock();  // Lock population
 
+    solutionCount++;
+
     // Duplicate checking
-    bool duplicate = false;
+    bool isDuplicate = false;
     if (fitness <= getBest(true).second) {
       for (auto& [other_individual, other_fitness] : population) {
-        if (other_fitness == fitness &&
-            *other_individual == *individual) {
-          duplicate = true;
+        if (other_fitness == fitness && *other_individual == *individual) {
+          isDuplicate = true;
           break;
         }
       }
     }
 
-    // Update counters
-    solutionCount++;
-    if (!duplicate) {
+    if (!isDuplicate) {
       newSolutionCount++;
     }
-    if (fitness > getBest(true).second) {
+    
+    // Check if this is the new fittest
+    bool isFittest = fitness > getBest(true).second;
+    
+    if (isFittest) {
       nonImprovingSolutionCount = 0;
-    } else {
+    }
+    else {
       nonImprovingSolutionCount++;
     }
 
@@ -424,17 +426,59 @@ protected:
     }
 
     // Insert into population
-    if (!duplicate) {
+    if (!isDuplicate) {
       if (population.size() < config->maxPopulationSize) {
         size_t index = population.size();
         population.emplace_back(individual, fitness);
         orderedIndices.insert(index);
-      } else {
-        size_t index = *orderedIndices.rbegin();
+      }
+      else {
+        size_t index = *orderedIndices.rbegin(); // take index of worst individual
         population[index] = std::make_pair(individual, fitness);
         orderedIndices.erase(std::prev(orderedIndices.end()));
         orderedIndices.insert(index);
       }
+    }
+
+    // Publish feedback to worker thread
+    if (threadIdx > 0) {
+      std::lock_guard lock(*initiatedOffspringMutexes[threadIdx - 1]);
+      initiatedOffspring[threadIdx - 1].emplace_back(individual, fitness, isDuplicate, isFittest);
+    }
+  }
+
+  void processFeedback() {
+    if (threadIndex == 0) {
+      throw std::logic_error("processFeedback() must not be called from main thread.");    
+    }
+
+    auto threadConfig = getThreadConfig();
+    std::lock_guard lock(*initiatedOffspringMutexes[threadIndex - 1]);
+    auto& feedback = initiatedOffspring[threadIndex - 1];
+
+    while (!feedback.empty()) {
+      if ( createdOffspring.empty() ) {
+        // No offspring waiting for feedback
+        feedback.pop_front();
+        continue;
+      }
+
+      auto& [offspring, reproducer] = createdOffspring.front();
+      auto& [novice, fitness, isDuplicate, isFittest] = feedback.front();
+
+      if (offspring.get() != novice.get()) {
+        // First offspring waiting for feedback doesn't match novice for which feedback is given - skip this feedback
+        feedback.pop_front();
+        continue;
+      }
+
+      // Call adaptation callback with feedback info
+      if (threadConfig->adaptation) {
+        threadConfig->adaptation(this, offspring, reproducer, fitness, isDuplicate, isFittest);
+      }
+
+      createdOffspring.pop_front();
+      feedback.pop_front();
     }
   }
 
@@ -453,8 +497,8 @@ protected:
       auto genome = threadConfig->spawn( this );
       // incubate into individual
       auto individual = config->incubate( this, genome );
-      // add individual (main thread will evaluate)
-      add( individual );
+      // add individual (main thread will evaluate, no tracking - nothing to learn from spawn)
+      add( individual, threadIndex );
     }
 
     do {
@@ -489,9 +533,12 @@ protected:
 
           if (individuals.size() == requiredIndividuals) {
             auto offspring = config->incubate( this, reproduction( this, individuals ) );
-            // No evaluation - main thread will evaluate
-//            updateWeights( weights[i], threadConfig->adaptationRate, fitness );
-            add( offspring );
+            // Track created offspring with strategy index
+            createdOffspring.emplace_back(offspring, i);
+            // Add to main queue (main thread will evaluate)
+            add( offspring, threadIndex );
+            // Process feedback opportunistically
+            processFeedback();
             break;
           }
         }
@@ -519,26 +566,8 @@ protected:
     normalizeWeights();
   }
 
-  /// Update weights when a strategy produces a new best solution (adaptive learning)
-  void updateWeights(double& weight, double adaptationRate, const Fitness& fitness) {
-    if ( fitness > getBest().second ) {
-      // scale down all weights and increase the successful one
-      for ( auto& otherWeight : weights ) {
-        otherWeight -= adaptationRate * otherWeight;
-      }
-      weight += adaptationRate * totalWeight;
-    }
-// TODO: is it worth penalizing the weight when solution is not improving?
-/*
-    else {
-      // scale down weight and normalize
-      totalWeight -= adaptationRate * weight;
-      weight *= (1.0 - adaptationRate);
-      normalizeWeights();
-    }
-*/
-  }
 };
+
 
 template < typename Individual, typename Genome >
 requires (
@@ -580,10 +609,19 @@ template < typename Individual, typename Genome >
 requires (
   std::movable<Individual> &&
   std::movable<Genome> &&
-  std::is_convertible_v<Individual,Genome> &&                                 
-  std::equality_comparable<Individual>     
+  std::is_convertible_v<Individual,Genome> &&
+  std::equality_comparable<Individual>
 )
 thread_local double EvolutionaryAlgorithm<Individual, Genome>::totalWeight = 0.0;
+
+template < typename Individual, typename Genome >
+requires (
+  std::movable<Individual> &&
+  std::movable<Genome> &&
+  std::is_convertible_v<Individual,Genome> &&
+  std::equality_comparable<Individual>
+)
+thread_local std::deque<std::pair<std::shared_ptr<const Individual>, size_t>> EvolutionaryAlgorithm<Individual, Genome>::createdOffspring = {};
 
 } // end namespace EVA
 
