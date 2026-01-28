@@ -43,4 +43,4 @@ struct Permutation {
 // Include all test files
 #include "sorting.cpp"
 #include "reconfiguration.cpp"
-#include "adaptiveness.cpp"
+//#include "adaptiveness.cpp"

@@ -101,15 +101,13 @@ int main(int argc, char** argv) {
     },
     // create lambda
     .monitor = []( [[maybe_unused]] EVA::EvolutionaryAlgorithm< Permutation, Values >* eva, const std::shared_ptr< const Permutation >& permutation, const EVA::Fitness& fitness) {
-      std::cout << eva->getSolutionCount() << ". ";       
-      std::cout << "(" << eva->getNonImprovingSolutionCount() << ") ";       
+      std::cout << eva->getSolutionCount() << ". ";
+      std::cout << "(" << eva->getNonImprovingSolutionCount() << ") ";
       auto [bestPermutation, bestFitness] = eva->getBest(true);
       if ( bestPermutation ) {
         std::cout << "Previous best: ( " << stringify(bestPermutation->values) << ", " << stringify(bestFitness) << " ) - ";
       }
-      std::cout << "New: ( " << stringify(permutation->values) << ", " << stringify(fitness) << " ) - ";
-      std::cout << "Thread: " << eva->getThreadIndex() << ", ";
-      std::cout << "Weights: " << stringify( eva->getWeights() ) << "\n";
+      std::cout << "New: ( " << stringify(permutation->values) << ", " << stringify(fitness) << " )\n";
     }
   });
   

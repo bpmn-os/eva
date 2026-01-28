@@ -2,10 +2,12 @@
 
 #include <vector>
 #include <set>
+#include <deque>
 #include <utility>
 #include <concepts>
 #include <mutex>
 #include <shared_mutex>
+#include <condition_variable>
 #include <thread>
 #include <random>
 #include <memory>
@@ -90,7 +92,8 @@ public:
     unsigned int maxComputationTime = std::numeric_limits<unsigned int>::max();  /// Time limit in seconds
     unsigned int maxSolutionCount = std::numeric_limits<unsigned int>::max();  /// Maximum number of solutions to be generated before termination 
     unsigned int maxNewSolutionCount = std::numeric_limits<unsigned int>::max();  /// Maximum number of non-duplicate solutions to be generated before termination 
-    unsigned int maxNonImprovingSolutionCount = std::numeric_limits<unsigned int>::max(); /// Maximum number of solutions without improvement to be generated before termination 
+    unsigned int maxNonImprovingSolutionCount = std::numeric_limits<unsigned int>::max(); /// Maximum number of solutions without improvement to be generated before termination
+    size_t initiationFrequency = 10; /// Process queue when it contains this many pending individuals
     ThreadConfig threadConfig = {}; /// Default configuration for the threads 
     std::function<bool(EVA*)> termination = nullptr; /// Custom termination function
     std::function<void(EVA*, const std::shared_ptr< const Individual >&, const Fitness&)> monitor = nullptr; /// Callback allowing to monitor the progress of the algorithm (note: the population is locked while the callback is executed)
@@ -143,55 +146,14 @@ public:
     
   };
 
-  /// Adds an evaluated individual to the population without exceeding the maximum population size
+  /// Adds an evaluated individual to the queue for population management
   void add( std::shared_ptr< const Individual > individual, Fitness fitness ) {
-    auto lock = acquireLock();
-
-    bool duplicate = false;
-    if ( fitness <= getBest(true).second ) {   
-      for ( auto& [other_individual,other_fitness] : population ) {
-        if ( other_fitness == fitness && *other_individual == *individual ) {
-          duplicate = true;
-          break;
-        }
-      }
+    {
+      std::lock_guard lock(queueMutex);
+      pendingOffspring.emplace_back(std::move(individual), std::move(fitness));
     }
-
-    solutionCount++;
-    if ( !duplicate ) {
-      newSolutionCount++;
-    }
-    if ( fitness > getBest(true).second ) {
-      nonImprovingSolutionCount = 0;      
-    }
-    else {
-      nonImprovingSolutionCount++;
-    }
-        
-    auto config = getConfig();
-    if ( config->monitor ) {
-      // allows to inspect added individual before it is inserted
-      // a lock on the population has already been acquired
-      // population still contains the individual that may be replaced
-      // use getWorst(true) to access this individual
-      config->monitor( this, individual, fitness );
-    }
-    
-    if ( !duplicate ) {
-      if ( population.size() < config->maxPopulationSize ) {
-        // add individual to population
-        size_t index = population.size();
-        population.emplace_back(std::move(individual), std::move(fitness));
-        orderedIndices.insert(index);
-      }
-      else {
-        // replace worst individual in population
-        size_t index = *orderedIndices.rbegin();
-        population[index] = std::make_pair(std::move(individual), std::move(fitness));
-        orderedIndices.erase(std::prev(orderedIndices.end()));
-        orderedIndices.insert(index);
-      }
-    }
+    // Always notify main thread (let it decide whether to process)
+    pendingWork.notify_one();
   }
   
   /// Returns a random index between 0 and size - 1
@@ -243,16 +205,52 @@ public:
     }
     terminate = false;
     threadsRunning = true;
+    activeWorkers = config->threads;
     std::vector<std::jthread> workers;
 
     for (unsigned int index = 1; index <= config->threads; ++index) {
       workers.emplace_back(
         [this,index](std::stop_token) {
           runThread(index);
+          // Worker finished - decrement counter and notify
+          activeWorkers--;
+          pendingWork.notify_one();
         }
       );
     }
-    // jthreads auto-join when destroyed at end of scope
+
+    // Main thread becomes queue manager
+    while (activeWorkers > 0 || !pendingOffspring.empty()) {
+      std::unique_lock lock(queueMutex);
+
+      // Wait until queue reaches batch size or all workers finish
+      pendingWork.wait(lock, [this, &config]() {
+        return pendingOffspring.size() >= config->initiationFrequency || activeWorkers == 0;
+      });
+
+      // Extract all queued entries (already holding lock)
+      std::deque<std::pair<std::shared_ptr<const Individual>, Fitness>> novices;
+      novices.swap(pendingOffspring);  // O(1) swap, pendingOffspring becomes empty
+      lock.unlock();
+
+      // Process novices
+      for (auto& novice : novices) {
+        initiate(novice);
+      }
+
+      // Check termination conditions (main thread has accurate counters)
+      if (
+        solutionCount >= config->maxSolutionCount ||
+        newSolutionCount >= config->maxNewSolutionCount ||
+        nonImprovingSolutionCount >= config->maxNonImprovingSolutionCount ||
+        std::chrono::system_clock::now() >= terminationTime ||
+        (config->termination && config->termination(this))
+      ) {
+        terminate = true;
+      }
+    }
+
+    // Workers auto-join when jthreads are destroyed
     threadsRunning = false;
   }
 
@@ -385,6 +383,60 @@ protected:
   std::chrono::time_point<std::chrono::system_clock> terminationTime;
   std::atomic<bool> terminate;
   std::atomic<bool> threadsRunning{false};
+  // Queue for pending individuals
+  std::deque<std::pair<std::shared_ptr<const Individual>, Fitness>> pendingOffspring;
+  mutable std::mutex queueMutex;
+  std::condition_variable pendingWork;
+  std::atomic<size_t> activeWorkers{0};
+
+  void initiate(const std::pair<std::shared_ptr<const Individual>, Fitness>& novice) {
+    auto lock = acquireLock();  // Lock population
+
+    const auto& [individual, fitness] = novice;
+
+    // Duplicate checking (same as current add() logic)
+    bool duplicate = false;
+    if (fitness <= getBest(true).second) {
+      for (auto& [other_individual, other_fitness] : population) {
+        if (other_fitness == fitness &&
+            *other_individual == *individual) {
+          duplicate = true;
+          break;
+        }
+      }
+    }
+
+    // Update counters
+    solutionCount++;
+    if (!duplicate) {
+      newSolutionCount++;
+    }
+    if (fitness > getBest(true).second) {
+      nonImprovingSolutionCount = 0;
+    } else {
+      nonImprovingSolutionCount++;
+    }
+
+    // Monitor callback
+    auto config = getConfig();
+    if (config->monitor) {
+      config->monitor(this, individual, fitness);
+    }
+
+    // Insert into population
+    if (!duplicate) {
+      if (population.size() < config->maxPopulationSize) {
+        size_t index = population.size();
+        population.emplace_back(individual, fitness);
+        orderedIndices.insert(index);
+      } else {
+        size_t index = *orderedIndices.rbegin();
+        population[index] = std::make_pair(individual, fitness);
+        orderedIndices.erase(std::prev(orderedIndices.end()));
+        orderedIndices.insert(index);
+      }
+    }
+  }
 
   void runThread(unsigned int index) {
     auto config = getConfig();
@@ -443,15 +495,7 @@ protected:
           }
         }
       }
-      if (
-        solutionCount >= config->maxSolutionCount ||
-        newSolutionCount >= config->maxNewSolutionCount ||
-        nonImprovingSolutionCount >= config->maxNonImprovingSolutionCount ||
-        std::chrono::system_clock::now() >= terminationTime ||
-        ( config->termination && config->termination( this ) )
-      ) {
-        terminate = true;
-      }
+      // Termination checking removed - main thread handles this
     } while ( !terminate );
   }
 

@@ -23,6 +23,7 @@ TEST_CASE("Reconfiguration before run", "[reconfiguration]") {
     .minPopulationSize = 10,
     .maxPopulationSize = 10,
     .maxSolutionCount = 10,
+    .initiationFrequency = 1,
     .threadConfig = defaultConfig
   });
 
@@ -64,6 +65,7 @@ TEST_CASE("Self-reconfiguration during run", "[reconfiguration]") {
     .minPopulationSize = 10,
     .maxPopulationSize = 10,
     .maxSolutionCount = 10,
+    .initiationFrequency = 1,
     .threadConfig = defaultConfig
   });
 
