@@ -2,7 +2,7 @@ CXX = g++
 CXXFLAGS = -std=c++23 -pthread -Wall -Wextra -Werror -Wno-error=unused-parameter -Wno-error=unused-but-set-variable -I../include
 LDFLAGS = -pthread
 
-# Fetch Catch2 v2 single-header (simpler for Makefile projects)
+# Fetch Catch2 v2 single-header
 CATCH2_URL = https://raw.githubusercontent.com/catchorg/Catch2/v2.13.10/single_include/catch2/catch.hpp
 CATCH2_HEADER = catch.hpp
 
