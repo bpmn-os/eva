@@ -42,8 +42,7 @@ Defines genetic operators per thread (each thread can have different operators):
 
   * `spawn`: Creates initial genomes `Genome(EVA*)`
   * `reproduction`: Vector of reproduction operators, each containing:
-    - Selection function: chooses parent(s) `Individual(EVA*)`
-    - Parent count: number of parents required
+    - Selectors: vector of selection functions, one per parent `vector<function<Individual(EVA*)>>`
     - Reproduction operator: creates offspring `Genome(EVA*, vector<Individual>&)`
     - Initial weight: starting probability weight
   * `calibration`: Callback invoked with feedback about created offspring `void(EVA*, offspring, reproducer, fitness, isDuplicate, isFittest)`

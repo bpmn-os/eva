@@ -54,14 +54,13 @@ public:
     std::function<Genome(EVA*)> spawn = nullptr;
 
     /**
-     * @brief Reproduction strategies: (selector, number_of_parents, operator, initial_weight)
+     * @brief Reproduction operators: (selectors, operator, initial_weight)
      *
-     * Multiple strategies can be provided (e.g., crossover, different mutations).
+     * Multiple operators can be provided (e.g., crossover, different mutations).
      * The algorithm learns which produce better solutions and uses them more frequently.
      */
     std::vector< std::tuple<
-      std::function<std::shared_ptr< const Individual >(EVA*)>, // selection
-      size_t, // required individuals
+      std::vector<std::function<std::shared_ptr< const Individual >(EVA*)>>, // selectors (one per parent)
       std::function<Genome(EVA*, const std::vector< std::shared_ptr< const Individual > >&)>, // reproduction
       double // initial weight
     > > reproduction = {};
@@ -496,17 +495,17 @@ protected:
       auto weightThreshold = randomProbability() * totalWeight;
       double cumulativeWeight = 0.0;
       for ( unsigned int i = 0; i < threadConfig->reproduction.size(); i++ ) {
-        auto& [ selector, requiredIndividuals, reproduction, initialWeight ] = threadConfig->reproduction[i];
+        auto& [ selectors, reproduction, initialWeight ] = threadConfig->reproduction[i];
         // do roulette wheel selection
         cumulativeWeight += weights[i];
         if (cumulativeWeight >= weightThreshold) {
-          // create offspring with selected reproduction strategy
+          // create offspring with selected reproduction operator
           std::vector< std::shared_ptr< const Individual > > individuals;
-          individuals.reserve(requiredIndividuals);
+          individuals.reserve(selectors.size());
 
-          for ( unsigned int j = 0; j < requiredIndividuals; j++ ) {
+          for ( unsigned int j = 0; j < selectors.size(); j++ ) {
             auto lock = acquireLock();
-            auto individual = selector( this );
+            auto individual = selectors[j]( this );
             if (
               std::find_if(
                 individuals.begin(),
@@ -521,9 +520,9 @@ protected:
             individuals.push_back( individual );
           }
 
-          if (individuals.size() == requiredIndividuals) {
+          if (individuals.size() == selectors.size()) {
             auto offspring = config->incubate( this, reproduction( this, individuals ) );
-            // Track created offspring with strategy index
+            // Track created offspring with reproducer index
             createdOffspring.emplace_back(offspring, i);
             // Add to main queue (main thread will evaluate)
             add( offspring, threadIndex );
@@ -549,7 +548,7 @@ protected:
   void initializeWeights(const std::shared_ptr<ThreadConfig>& config) {
     weights.clear();
     totalWeight = 0.0;
-    for ( auto& [ selector, quantity, reproduction, weight ] : config->reproduction ) {
+    for ( auto& [ selectors, reproduction, weight ] : config->reproduction ) {
       weights.push_back( weight );
       totalWeight += weight;
     }

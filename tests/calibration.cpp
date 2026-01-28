@@ -39,8 +39,8 @@ TEST_CASE("Adaptive weights favor successful operators", "[calibration]") {
     .threadConfig = {
       .spawn = spawnReverse,
       .reproduction = {
-        { EVA::randomSelection<Permutation, Values>(), 1, goodOperator, 1.0 },  // Good
-        { EVA::randomSelection<Permutation, Values>(), 1, badOperator, 1.0 }    // Bad
+        { {EVA::randomSelection<Permutation, Values>()}, goodOperator, 1.0 },  // Good
+        { {EVA::randomSelection<Permutation, Values>()}, badOperator, 1.0 }    // Bad
       },
       .calibration = [&weights](auto* eva, const auto& offspring, size_t reproducer, const auto& fitness, bool isDuplicate, bool isFittest) {
         // Apply default weight update with learning rate 0.1
@@ -100,8 +100,8 @@ TEST_CASE("Zero adaptation rate keeps weights constant", "[calibration]") {
     .threadConfig = {
       .spawn = spawnReverse,
       .reproduction = {
-        { EVA::randomSelection<Permutation, Values>(), 1, goodOperator, 1.0 },  // Good
-        { EVA::randomSelection<Permutation, Values>(), 1, badOperator, 1.0 }    // Bad
+        { {EVA::randomSelection<Permutation, Values>()}, goodOperator, 1.0 },  // Good
+        { {EVA::randomSelection<Permutation, Values>()}, badOperator, 1.0 }    // Bad
       },
       .calibration = [&weights](auto* eva, const auto& offspring, size_t reproducer, const auto& fitness, bool isDuplicate, bool isFittest) {
         // Apply default weight update with zero learning rate (should not change weights)

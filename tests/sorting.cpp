@@ -10,7 +10,7 @@ TEST_CASE("Sorting", "[sorting]") {
       .spawn = EVA::randomPermutation<Permutation, Values>(5),  // Create random 5-element permutations
       .reproduction = {
         {
-          EVA::binaryTournamentSelection<Permutation, Values>(), 2,  // Select 2 parents
+          {EVA::binaryTournamentSelection<Permutation, Values>(), EVA::binaryTournamentSelection<Permutation, Values>()},  // 2 parents
           EVA::orderedCrossover<Permutation, Values>(), 1.0          // Crossover operator, weight 1.0
         },
       },

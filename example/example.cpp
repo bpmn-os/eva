@@ -85,13 +85,16 @@ int main(int argc, char** argv) {
       // use default implementations
       .spawn = EVA::randomPermutation<Permutation, Values>(length),
       .reproduction = {
-        // Crossover with different selection strategies
-        { EVA::binaryTournamentSelection<Permutation, Values>(), 2, EVA::orderedCrossover<Permutation, Values>(), 1.0 },
-        { EVA::rankSelection<Permutation, Values>(), 2, EVA::orderedCrossover<Permutation, Values>(), 1.0 },
+        // Crossover with different selectors
+        { {EVA::binaryTournamentSelection<Permutation, Values>(), EVA::binaryTournamentSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>(), 1.0 },
+        { {EVA::binaryTournamentSelection<Permutation, Values>(), EVA::randomSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>(), 1.0 },
+        { {EVA::rankSelection<Permutation, Values>(), EVA::rankSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>(), 1.0 },
+        { {EVA::rankSelection<Permutation, Values>(), EVA::randomSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>(), 1.0 },
+        { {EVA::randomSelection<Permutation, Values>(), EVA::randomSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>(), 1.0 },
         // Mutations with different selection strategies
-        { EVA::rankSelection<Permutation, Values>(), 1, EVA::randomSwap<Permutation, Values>(), 1.0 },
-        { EVA::binaryTournamentSelection<Permutation, Values>(), 1, EVA::shuffleRandomSegment<Permutation, Values>(), 1.0 },
-        { EVA::randomSelection<Permutation, Values>(), 1, EVA::swapRandomSegments<Permutation, Values>(), 1.0 }
+        { {EVA::rankSelection<Permutation, Values>()}, EVA::randomSwap<Permutation, Values>(), 1.0 },
+        { {EVA::binaryTournamentSelection<Permutation, Values>()}, EVA::shuffleRandomSegment<Permutation, Values>(), 1.0 },
+        { {EVA::randomSelection<Permutation, Values>()}, EVA::swapRandomSegments<Permutation, Values>(), 1.0 }
       },
       .calibration = EVA::weightUpdate<Permutation, Values>(0.1)  // Use adaptive weight update with learning rate 0.1
     },
