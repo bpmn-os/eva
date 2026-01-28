@@ -65,9 +65,12 @@ template <typename Range>
 
 int main(int argc, char** argv) {
   size_t length;
-  auto prompt = std::format("Enter the length of the permutation: ");
+  auto prompt = std::format("Enter the length of the permutation (at least 5): ");
   std::cout << prompt;
   std::cin >> length;
+  if (length < 5) {
+    length = 5;
+  }
   std::cout << std::format("Using permutation length: {}\n", length);
     
   // Create instance of evolutionary algorithm with inline configuration
