@@ -38,14 +38,13 @@ TEST_CASE("Adaptive weights favor successful operators", "[calibration]") {
     .initiationFrequency = 1,
     .threadConfig = {
       .spawn = spawnReverse,
-      .adaptationRate = 0.1,
       .reproduction = {
         { EVA::randomSelection<Permutation, Values>(), 1, goodOperator, 1.0 },  // Good
         { EVA::randomSelection<Permutation, Values>(), 1, badOperator, 1.0 }    // Bad
       },
       .calibration = [&weights](auto* eva, const auto& offspring, size_t reproducer, const auto& fitness, bool isDuplicate, bool isFittest) {
-        // Apply default weight update
-        EVA::weightUpdate<Permutation, Values>()(eva, offspring, reproducer, fitness, isDuplicate, isFittest);
+        // Apply default weight update with learning rate 0.1
+        EVA::weightUpdate<Permutation, Values>(0.1)(eva, offspring, reproducer, fitness, isDuplicate, isFittest);
         // Capture weights for test verification
         weights = EVA::EvolutionaryAlgorithm<Permutation, Values>::weights;
       }
@@ -100,14 +99,13 @@ TEST_CASE("Zero adaptation rate keeps weights constant", "[calibration]") {
     .initiationFrequency = 1,
     .threadConfig = {
       .spawn = spawnReverse,
-      .adaptationRate = 0.0,  // No learning
       .reproduction = {
         { EVA::randomSelection<Permutation, Values>(), 1, goodOperator, 1.0 },  // Good
         { EVA::randomSelection<Permutation, Values>(), 1, badOperator, 1.0 }    // Bad
       },
       .calibration = [&weights](auto* eva, const auto& offspring, size_t reproducer, const auto& fitness, bool isDuplicate, bool isFittest) {
-        // Apply default weight update (with zero adaptation rate, should not change)
-        EVA::weightUpdate<Permutation, Values>()(eva, offspring, reproducer, fitness, isDuplicate, isFittest);
+        // Apply default weight update with zero learning rate (should not change weights)
+        EVA::weightUpdate<Permutation, Values>(0.0)(eva, offspring, reproducer, fitness, isDuplicate, isFittest);
         // Capture weights for test verification
         weights = EVA::EvolutionaryAlgorithm<Permutation, Values>::weights;
       }

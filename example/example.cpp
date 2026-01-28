@@ -84,7 +84,6 @@ int main(int argc, char** argv) {
     .threadConfig = {
       // use default implementations
       .spawn = EVA::randomPermutation<Permutation, Values>(length),
-      .adaptationRate = 0.1,  // Enable adaptive learning
       .reproduction = {
         // Crossover with different selection strategies
         { EVA::binaryTournamentSelection<Permutation, Values>(), 2, EVA::orderedCrossover<Permutation, Values>(), 1.0 },
@@ -94,7 +93,7 @@ int main(int argc, char** argv) {
         { EVA::binaryTournamentSelection<Permutation, Values>(), 1, EVA::shuffleRandomSegment<Permutation, Values>(), 1.0 },
         { EVA::randomSelection<Permutation, Values>(), 1, EVA::swapRandomSegments<Permutation, Values>(), 1.0 }
       },
-      .calibration = EVA::weightUpdate<Permutation, Values>()  // Use default adaptive weight update
+      .calibration = EVA::weightUpdate<Permutation, Values>(0.1)  // Use adaptive weight update with learning rate 0.1
     },
     .incubate = EVA::constructor<Permutation, Values>(),
     .evaluate = EVA::fitnessFunction<Permutation, Values>(),

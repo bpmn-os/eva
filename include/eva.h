@@ -46,22 +46,12 @@ public:
    *
    * Supports adaptive operator selection: when multiple reproduction strategies are
    * provided, the algorithm learns which work best and uses them more frequently.
-   * Controlled by adaptationRate (higher = faster learning).
    */
   struct ThreadConfig {
     using EVA = EvolutionaryAlgorithm<Individual, Genome>;
 
     /// Function to create initial genomes (used during population seeding)
     std::function<Genome(EVA*)> spawn = nullptr;
-
-    /**
-     * @brief Learning rate for adaptive operator selection (0.0 = no learning, 1.0 = instant)
-     *
-     * When a strategy produces a new best solution, its weight increases by this rate.
-     * Default 0.1 provides gradual, stable learning. Higher values (e.g., 0.5) adapt faster
-     * but may be less stable.
-     */
-    double adaptationRate = 0.1;
 
     /**
      * @brief Reproduction strategies: (selector, number_of_parents, operator, initial_weight)
@@ -90,7 +80,7 @@ public:
     unsigned int maxSolutionCount = std::numeric_limits<unsigned int>::max();  /// Maximum number of solutions to be generated before termination 
     unsigned int maxNewSolutionCount = std::numeric_limits<unsigned int>::max();  /// Maximum number of non-duplicate solutions to be generated before termination 
     unsigned int maxNonImprovingSolutionCount = std::numeric_limits<unsigned int>::max(); /// Maximum number of solutions without improvement to be generated before termination
-    size_t initiationFrequency = 10; /// Process queue when it contains this many pending individuals
+    size_t initiationFrequency = 1; /// Process queue when it contains this many pending individuals
     ThreadConfig threadConfig = {}; /// Default configuration for the threads
     /// Function to transform a genome into a complete individual
     std::function<std::shared_ptr< const Individual >(EVA*, const Genome&)> incubate = nullptr;
