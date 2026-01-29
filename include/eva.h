@@ -177,6 +177,9 @@ public:
   static thread_local std::vector<double> weights;
   static thread_local double totalWeight;
 
+  // Thread-local stats
+  static thread_local std::vector<std::tuple<unsigned int,unsigned int,unsigned int>> stats; // statistics for each reproducer (count,duplicates,improvements)
+
   void run() {
     auto config = getConfig();
     solutionCount = 0;
@@ -334,6 +337,7 @@ public:
       std::unique_lock lock(*threadConfigMutex[index-1]);
       threadConfigs[index - 1] = std::make_shared<ThreadConfig>(std::move(config));
       initializeWeights(threadConfigs[index - 1]);  // Always reinitialize weights
+      initializeStats(threadConfigs[index - 1]);  // Always reinitialize stats
       createdOffspring.clear();
     }
     else {
@@ -461,6 +465,12 @@ protected:
         continue;
       }
 
+      // Update stats
+      auto& [count,duplicates,improvements] = stats[reproducer];
+      count++;
+      if ( isDuplicate ) duplicates++;
+      if ( isFittest ) improvements++;      
+
       // Call calibration callback with feedback info
       if (threadConfig->calibration) {
         threadConfig->calibration(this, offspring, reproducer, fitness, isDuplicate, isFittest);
@@ -478,6 +488,7 @@ protected:
 
     auto threadConfig = getThreadConfig();
     initializeWeights(threadConfig);
+    initializeStats(threadConfig);
 
     while ( population.size() < config->minPopulationSize && !terminate ) {
       // update to latest config
@@ -544,7 +555,7 @@ protected:
     totalWeight = 1.0;
   }
 
-  /// Initialize thread-local weights from config (called at startup and reconfiguration)
+  /// Initialize thread-local weights from config
   void initializeWeights(const std::shared_ptr<ThreadConfig>& config) {
     weights.clear();
     totalWeight = 0.0;
@@ -555,6 +566,13 @@ protected:
     normalizeWeights();
   }
 
+  /// Initialize thread-local stats
+  void initializeStats(const std::shared_ptr<ThreadConfig>& config) {
+    stats.clear();
+    for ( unsigned int i = 0; i < config->reproduction.size(); i++ ) {
+      stats.push_back( {0, 0, 0} );
+    }
+  }
 };
 
 
@@ -593,6 +611,15 @@ requires (
   std::equality_comparable<Individual>     
 )
 thread_local std::vector<double> EvolutionaryAlgorithm<Individual, Genome>::weights = {};
+
+template < typename Individual, typename Genome >
+requires (
+  std::movable<Individual> &&
+  std::movable<Genome> &&
+  std::is_convertible_v<Individual,Genome> &&                                 
+  std::equality_comparable<Individual>     
+)
+thread_local std::vector<std::tuple<unsigned int,unsigned int,unsigned int>> EvolutionaryAlgorithm<Individual, Genome>::stats = {};
 
 template < typename Individual, typename Genome >
 requires (
