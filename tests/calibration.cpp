@@ -42,8 +42,8 @@ TEST_CASE("Adaptive weights favor successful operators", "[calibration]") {
         { {EVA::randomSelection<Permutation, Values>()}, goodOperator },  // Good
         { {EVA::randomSelection<Permutation, Values>()}, badOperator }    // Bad
       },
-      .calibration = [&weights](auto* eva, const auto& offspring, size_t reproducer, const auto& fitness, bool isDuplicate, bool isFittest) {
-        EVA::improvementBasedAdaptation<Permutation, Values>()(eva, offspring, reproducer, fitness, isDuplicate, isFittest);
+      .calibration = [&weights](auto* eva, const auto& offspring, size_t reproducer, const auto& fitness, bool isUnfit, bool isDuplicate, bool isFittest) {
+        EVA::improvementBasedAdaptation<Permutation, Values>()(eva, offspring, reproducer, fitness, isUnfit, isDuplicate, isFittest);
         // Capture weights for test verification
         weights = EVA::EvolutionaryAlgorithm<Permutation, Values>::weights;
       }

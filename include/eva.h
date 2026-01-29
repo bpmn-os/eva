@@ -65,7 +65,7 @@ public:
     > > reproduction = {};
 
     /// Adaptive learning callback: updates weights based on offspring feedback
-    std::function<void(EVA*, const std::shared_ptr<const Individual>&, size_t reproducer, const Fitness&, bool isDuplicate, bool isFittest)> calibration = nullptr;
+    std::function<void(EVA*, const std::shared_ptr<const Individual>&, size_t reproducer, const Fitness&, bool isUnfit, bool isDuplicate, bool isFittest)> calibration = nullptr;
   };
 
   struct Config {
@@ -177,7 +177,7 @@ public:
   static thread_local double totalWeight;
 
   // Thread-local stats
-  static thread_local std::vector<std::tuple<unsigned int,unsigned int,unsigned int>> stats; // statistics for each reproducer (count,duplicates,improvements)
+  static thread_local std::vector<std::tuple<unsigned int,unsigned int,unsigned int>> stats; // statistics for each reproducer (count,insertions,improvements)
 
   /// Normalize weights to sum to 1.0 (for roulette wheel selection)
   void normalizeWeights() {
@@ -398,8 +398,8 @@ protected:
   mutable std::mutex queueMutex;
   std::condition_variable pendingWork;
   std::atomic<size_t> activeWorkers{0};
-  // Per-thread queues of initiated offspring: (individual, fitness, isDuplicate, isFittest)
-  std::vector<std::deque<std::tuple<std::shared_ptr<const Individual>, Fitness, bool, bool>>> initiatedOffspring;
+  // Per-thread queues of initiated offspring: (individual, fitness, isUnfit, isDuplicate, isFittest)
+  std::vector<std::deque<std::tuple<std::shared_ptr<const Individual>, Fitness, bool, bool, bool>>> initiatedOffspring;
   std::vector<std::unique_ptr<std::mutex>> initiatedOffspringMutexes;
 
   void initiate(const std::shared_ptr<const Individual>& individual, size_t threadIdx) {
@@ -414,7 +414,7 @@ protected:
 
     // Duplicate checking
     bool isDuplicate = false;
-    if (fitness <= getBest(true).second) {
+    if (fitness >= getWorst(true).second && fitness <= getBest(true).second) {
       for (auto& [other_individual, other_fitness] : population) {
         if (other_fitness == fitness && *other_individual == *individual) {
           isDuplicate = true;
@@ -427,8 +427,8 @@ protected:
       newSolutionCount++;
     }
     
-    // Check if this is the new fittest
-    bool isFittest = fitness > getBest(true).second;
+    bool isUnfit = (fitness < getWorst(true).second && population.size() >= config->maxPopulationSize);
+    bool isFittest = (fitness > getBest(true).second);
     
     if (isFittest) {
       nonImprovingSolutionCount = 0;
@@ -443,7 +443,7 @@ protected:
     }
 
     // Insert into population
-    if (!isDuplicate) {
+    if (!isUnfit && !isDuplicate) {
       if (population.size() < config->maxPopulationSize) {
         size_t index = population.size();
         population.emplace_back(individual, fitness);
@@ -460,7 +460,7 @@ protected:
     // Publish feedback to worker thread
     if (threadIdx > 0) {
       std::lock_guard lock(*initiatedOffspringMutexes[threadIdx - 1]);
-      initiatedOffspring[threadIdx - 1].emplace_back(individual, fitness, isDuplicate, isFittest);
+      initiatedOffspring[threadIdx - 1].emplace_back(individual, fitness, isUnfit, isDuplicate, isFittest);
     }
   }
 
@@ -481,7 +481,7 @@ protected:
       }
 
       auto& [offspring, reproducer] = createdOffspring.front();
-      auto& [novice, fitness, isDuplicate, isFittest] = feedback.front();
+      auto& [novice, fitness, isUnfit, isDuplicate, isFittest] = feedback.front();
 
       if (offspring.get() != novice.get()) {
         // First offspring waiting for feedback doesn't match novice for which feedback is given - skip this feedback
@@ -490,14 +490,14 @@ protected:
       }
 
       // Update stats
-      auto& [count,duplicates,improvements] = stats[reproducer];
+      auto& [count,insertions,improvements] = stats[reproducer];
       count++;
-      if ( isDuplicate ) duplicates++;
+      if ( !isUnfit && !isDuplicate ) insertions++;
       if ( isFittest ) improvements++;      
 
       // Call calibration callback with feedback info
       if (threadConfig->calibration) {
-        threadConfig->calibration(this, offspring, reproducer, fitness, isDuplicate, isFittest);
+        threadConfig->calibration(this, offspring, reproducer, fitness, isUnfit, isDuplicate, isFittest);
       }
 
       createdOffspring.pop_front();
