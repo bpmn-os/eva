@@ -10,7 +10,7 @@
 #include <mutator/randomSwap.h>
 #include <incubator/constructor.h>
 #include <evaluator/fitnessFunction.h>
-#include <calibration/weightUpdate.h>
+#include <calibration/improvementBasedAdaptation.h>
 
 // Test problem: sort a permutation of integers
 // Genome type represents the genetic material (vector of integers)

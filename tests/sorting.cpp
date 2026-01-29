@@ -11,7 +11,7 @@ TEST_CASE("Sorting", "[sorting]") {
       .reproduction = {
         {
           {EVA::binaryTournamentSelection<Permutation, Values>(), EVA::binaryTournamentSelection<Permutation, Values>()},  // 2 parents
-          EVA::orderedCrossover<Permutation, Values>(), 1.0          // Crossover operator, weight 1.0
+          EVA::orderedCrossover<Permutation, Values>()          // Crossover operator
         },
       },
     },

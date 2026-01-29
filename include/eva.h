@@ -61,8 +61,7 @@ public:
      */
     std::vector< std::tuple<
       std::vector<std::function<std::shared_ptr< const Individual >(EVA*)>>, // selectors (one per parent)
-      std::function<Genome(EVA*, const std::vector< std::shared_ptr< const Individual > >&)>, // reproduction
-      double // initial weight
+      std::function<Genome(EVA*, const std::vector< std::shared_ptr< const Individual > >&)> // reproduction
     > > reproduction = {};
 
     /// Adaptive learning callback: updates weights based on offspring feedback
@@ -179,6 +178,31 @@ public:
 
   // Thread-local stats
   static thread_local std::vector<std::tuple<unsigned int,unsigned int,unsigned int>> stats; // statistics for each reproducer (count,duplicates,improvements)
+
+  /// Normalize weights to sum to 1.0 (for roulette wheel selection)
+  void normalizeWeights() {
+    for ( auto& weight : weights ) {
+      weight /= totalWeight;
+    }
+    totalWeight = 1.0;
+  }
+
+  /// Initialize thread-local weights from config
+  void initializeWeights(const std::shared_ptr<ThreadConfig>& config) {
+    weights.clear();
+    for ( unsigned int i = 0; i < config->reproduction.size(); i++ ) {
+      weights.push_back( 1.0 / config->reproduction.size() );
+    }
+    totalWeight = 1.0;
+  }
+
+  /// Initialize thread-local stats
+  void initializeStats(const std::shared_ptr<ThreadConfig>& config) {
+    stats.clear();
+    for ( unsigned int i = 0; i < config->reproduction.size(); i++ ) {
+      stats.push_back( {0, 0, 0} );
+    }
+  }
 
   void run() {
     auto config = getConfig();
@@ -506,7 +530,7 @@ protected:
       auto weightThreshold = randomProbability() * totalWeight;
       double cumulativeWeight = 0.0;
       for ( unsigned int i = 0; i < threadConfig->reproduction.size(); i++ ) {
-        auto& [ selectors, reproduction, initialWeight ] = threadConfig->reproduction[i];
+        auto& [ selectors, reproduction ] = threadConfig->reproduction[i];
         // do roulette wheel selection
         cumulativeWeight += weights[i];
         if (cumulativeWeight >= weightThreshold) {
@@ -545,33 +569,6 @@ protected:
       }
       // Termination checking removed - main thread handles this
     } while ( !terminate );
-  }
-
-  /// Normalize weights to sum to 1.0 (for roulette wheel selection)
-  void normalizeWeights() {
-    for ( auto& weight : weights ) {
-      weight /= totalWeight;
-    }
-    totalWeight = 1.0;
-  }
-
-  /// Initialize thread-local weights from config
-  void initializeWeights(const std::shared_ptr<ThreadConfig>& config) {
-    weights.clear();
-    totalWeight = 0.0;
-    for ( auto& [ selectors, reproduction, weight ] : config->reproduction ) {
-      weights.push_back( weight );
-      totalWeight += weight;
-    }
-    normalizeWeights();
-  }
-
-  /// Initialize thread-local stats
-  void initializeStats(const std::shared_ptr<ThreadConfig>& config) {
-    stats.clear();
-    for ( unsigned int i = 0; i < config->reproduction.size(); i++ ) {
-      stats.push_back( {0, 0, 0} );
-    }
   }
 };
 

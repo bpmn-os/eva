@@ -2,15 +2,15 @@ TEST_CASE("Reconfiguration before run", "[reconfiguration]") {
   EVA::EvolutionaryAlgorithm<Permutation, Values>::ThreadConfig defaultConfig = {
     .spawn = EVA::randomPermutation<Permutation, Values>(5),
     .reproduction = {
-      { {EVA::binaryTournamentSelection<Permutation, Values>(), EVA::binaryTournamentSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>(), 1.0 },
-      { {EVA::randomSelection<Permutation, Values>(), EVA::randomSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>(), 1.0 }
+      { {EVA::binaryTournamentSelection<Permutation, Values>(), EVA::binaryTournamentSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>() },
+      { {EVA::randomSelection<Permutation, Values>(), EVA::randomSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>() }
     }
   };
 
   EVA::EvolutionaryAlgorithm<Permutation, Values>::ThreadConfig alternativeConfig = {
     .spawn = EVA::randomPermutation<Permutation, Values>(5),
     .reproduction = {
-      { {EVA::randomSelection<Permutation, Values>()}, EVA::randomSwap<Permutation, Values>(), 1.0 }
+      { {EVA::randomSelection<Permutation, Values>()}, EVA::randomSwap<Permutation, Values>() }
     }
   };
 
@@ -39,8 +39,8 @@ TEST_CASE("Self-reconfiguration during run", "[reconfiguration]") {
   EVA::EvolutionaryAlgorithm<Permutation, Values>::ThreadConfig defaultConfig = {
     .spawn = EVA::randomPermutation<Permutation, Values>(5),
     .reproduction = {
-      { {EVA::binaryTournamentSelection<Permutation, Values>(), EVA::binaryTournamentSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>(), 1.0 },
-      { {EVA::randomSelection<Permutation, Values>(), EVA::randomSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>(), 1.0 }
+      { {EVA::binaryTournamentSelection<Permutation, Values>(), EVA::binaryTournamentSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>() },
+      { {EVA::randomSelection<Permutation, Values>(), EVA::randomSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>() }
     }
   };
 
@@ -50,7 +50,7 @@ TEST_CASE("Self-reconfiguration during run", "[reconfiguration]") {
       return EVA::randomPermutation<Permutation, Values>(5)(eva);
     },
     .reproduction = {
-      { {EVA::randomSelection<Permutation, Values>()}, EVA::randomSwap<Permutation, Values>(), 1.0 }
+      { {EVA::randomSelection<Permutation, Values>()}, EVA::randomSwap<Permutation, Values>() }
     }
   };
 
