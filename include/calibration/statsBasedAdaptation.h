@@ -7,13 +7,13 @@ namespace EVA {
 /**
  * @brief Statistics-based weight adaptation strategy
  *
- * Recalculates weights after each offspring based on accumulated statistics (count, duplicates, improvements).
- * Balances improvement (finding better solutions) and novelty (avoiding duplicates).
+ * Recalculates weights after each offspring based on accumulated statistics (count, insertions, improvements).
+ * Balances improvement (finding new best solutions) and insertions (finding new good solutions).
  *
  * @tparam Individual The individual type
  * @tparam Genome The genome type
  * @param improvementFactor Factor for improvement rate
- * @param noveltyFactor Factor for novelty rate
+ * @param insertionFactor Factor for insertion rate
  */
 template <typename Individual, typename Genome = Individual>
 std::function<void(EvolutionaryAlgorithm<Individual, Genome>*, const std::shared_ptr<const Individual>&, size_t, const Fitness&, bool, bool, bool)>
