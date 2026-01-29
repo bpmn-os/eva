@@ -44,19 +44,7 @@ Defines genetic operators per thread (each thread can have different operators):
   * `reproduction`: Vector of reproduction operators, each containing:
     - Selectors: vector of selection functions, one per parent `vector<function<Individual(EVA*)>>`
     - Reproduction operator: creates offspring `Genome(EVA*, vector<Individual>&)`
-    - Initial weight: starting probability weight
-  * `calibration`: Callback invoked with feedback about created offspring `void(EVA*, offspring, reproducer, fitness, isDuplicate, isFittest)`
-    - Receives: offspring pointer, reproducer index, fitness, isDuplicate flag, isFittest flag
-    - Can adjust operator weights based on offspring success/failure
-    - Default implementation: `weightUpdate(adaptationRate)` increases weight of operators producing fittest offspring
-
-**Adaptive Operator Selection:**
-When multiple reproduction operators are provided, the algorithm uses roulette wheel selection based on operator weights.
-  - Weights are **thread-local** - each thread learns independently which operators work best
-  - Main thread publishes feedback (fitness, isDuplicate, isFittest) for all offspring back to worker threads
-  - Workers process feedback opportunistically and invoke `calibration` callback to adjust weights
-  - Default `weightUpdate` implementation increases weight of successful operators by `adaptationRate` while decreasing others proportionally
-
+  * `calibration`: Callback invoked to update weights for roulette wheel selection  of reproduction operators. 
 
 ## Functionality
 
@@ -64,7 +52,7 @@ The library uses a producer-consumer architecture where worker threads generate 
 
 During evolution, each worker thread selects parent individuals from the population, applies a reproduction operator to create an offspring genome, incubates the genome into an individual, tracks the created offspring with its reproducer index, and adds the unevaluated individual to the queue. 
 
-The main thread waits for the queue to reach `initiationFrequency` individuals, then extracts the new individual(s). For each individual, the main thread evaluates fitness and checks whether a duplicate already exists in the population and invokes the `monitor` callback if provided. If the individual is not a duplicate, it is inserted into the population and replaces the worst if `maxPopulationSize` would otherwise be exceeded. Thereafter feedback is provided to the worker thread that created the individual, allowing the worker thread to update its own parameters by invoking its `calibration` callback to adjusts operator parameters based on offspring performance.
+The main thread waits for the queue to reach `initiationFrequency` individuals, then extracts the new individual(s). For each individual, the main thread evaluates fitness and checks whether a duplicate already exists in the population and invokes the `monitor` callback if provided. If the individual is not a duplicate, it is inserted into the population and replaces the worst if `maxPopulationSize` would otherwise be exceeded. Thereafter feedback is provided to the worker thread that created the individual, allowing the worker thread to update its own parameters by invoking its `calibration` callback to adjusts operator weights.
 
 After processing new individuals, the main thread checks termination conditions including `maxSolutionCount`, `maxNewSolutionCount`, `maxNonImprovingSolutionCount`, `maxComputationTime`, and the `termination` callback. When a termination condition is met, the main thread sets a terminate flag. Workers detect this flag and exit their loops. The main thread continues processing remaining queued individuals until all workers finish and the queue is empty.
 
