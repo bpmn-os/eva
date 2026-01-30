@@ -117,6 +117,13 @@ public:
     if ( config.threadConfig.reproduction.empty() ) {
       throw std::logic_error("EvolutionaryAlgorithm: reproduction operator(s) missing");
     }
+    if ( 
+      auto& [selectors, reproduction] = config.threadConfig.reproduction.back(); 
+      selectors.size() > config.minPopulationSize 
+    ) {
+      throw std::logic_error("EvolutionaryAlgorithm: last reproduction operator must not have more selectors then minimal population size");
+    }       
+    
     if ( !config.incubate ) {
       throw std::logic_error("EvolutionaryAlgorithm: incubator missing");
     }
@@ -534,6 +541,12 @@ protected:
         // do roulette wheel selection
         cumulativeWeight += weights[i];
         if (cumulativeWeight >= weightThreshold) {
+          if ( selectors.size() > population.size() ) {
+            // Population size is too small to find enough individuals
+            continue;
+          }
+        
+        
           // create offspring with selected reproduction operator
           std::vector< std::shared_ptr< const Individual > > individuals;
           individuals.reserve(selectors.size());
