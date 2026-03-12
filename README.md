@@ -7,7 +7,7 @@ This C++ header-only library provides an implementation of an evolutionary algor
   * **`Genome`**: This type represents the genetic material directly manipulated by genetic operators such as *crossover* and *mutation*.
   * **`Individual`**: This type represents a complete entity within the population. An `Individual` is created by *incubating* a `Genome`. Incubation may comprise the inclusion of additional data not contained in the `Genome` and heuristic variations of the `Genome`, e.g., by education. 
 
-The library requires that `Individual` objects can be implicitly converted to `Genome` objects, as enforced by the `std::is_convertible_v<Individual, Genome>` constraint. This allows genetic operators expecting a `Genome` to directly process `Individual` objects. A custom `incubate` function is needed to transform a `Genome` (the result of genetic operations) into an `Individual` suitable for population inclusion.
+The library requires that `Individual` objects can be implicitly converted to `Genome` objects, as enforced by the `std::is_convertible_v<Individual, Genome>` constraint. This allows genetic operators expecting a `Genome` to directly process `Individual` objects. Operator-specific `incubate` functions can be used to transform a `Genome` (the result of genetic operations) into an `Individual`.
 
 ## Configuration
 
@@ -25,7 +25,6 @@ Controls algorithm-wide settings:
   * `maxNonImprovingSolutionCount`: Stop after this many solutions without improvement
   * `initiationFrequency`: Process queue when it contains this many pending individuals
   * `threadConfig`: Default configuration for all threads
-  * `incubate`: Transforms `Genome` to `Individual`: `Individual(EVA*, const Genome&)`
   * `evaluate`: Assigns fitness to `Individual`: `Fitness(EVA*, const Individual&)`
   * `termination`: Callback to check if algorithm should stop `bool(EVA*)`
   * `monitor`: Callback invoked for each new solution `void(EVA*, const Individual&, const Fitness&)`
@@ -40,11 +39,14 @@ Controls algorithm-wide settings:
 
 Defines genetic operators per thread (each thread can have different operators):
 
-  * `spawn`: Creates initial genomes `Genome(EVA*)`
+  * `spawn`: Tuple containing:
+    - Constructor: creates initial genomes `Genome(EVA*)`
+    - Incubator: transforms genome to individual `Individual(EVA*, const Genome&)`
   * `reproduction`: Vector of reproduction operators, each containing:
     - Selectors: vector of selection functions, one per parent `vector<function<Individual(EVA*)>>`
-    - Reproduction operator: creates offspring `Genome(EVA*, vector<Individual>&)`
-  * `calibration`: Callback invoked to update weights for roulette wheel selection  of reproduction operators. 
+    - Operator: creates offspring `Genome(EVA*, vector<Individual>&)`
+    - Incubator: transforms genome to individual `Individual(EVA*, const Genome&)`
+  * `calibration`: Callback invoked to update weights for roulette wheel selection of reproduction operators. 
 
 ## Functionality
 

@@ -50,18 +50,24 @@ public:
   struct ThreadConfig {
     using EVA = EvolutionaryAlgorithm<Individual, Genome>;
 
-    /// Function to create initial genomes (used during population seeding)
-    std::function<Genome(EVA*)> spawn = nullptr;
+    /**
+     * @brief Spawn operator: (constructor, incubator)
+     */
+    std::tuple<
+      std::function<Genome(EVA*)>, // constructor
+      std::function<std::shared_ptr<const Individual>(EVA*, const Genome&)> // incubator
+    > spawn;
 
     /**
-     * @brief Reproduction operators: (selectors, operator, initial_weight)
+     * @brief Reproduction operators: (selectors, operator, incubator)
      *
      * Multiple operators can be provided (e.g., crossover, different mutations).
      * The algorithm learns which produce better solutions and uses them more frequently.
      */
     std::vector< std::tuple<
       std::vector<std::function<std::shared_ptr< const Individual >(EVA*)>>, // selectors (one per parent)
-      std::function<Genome(EVA*, const std::vector< std::shared_ptr< const Individual > >&)> // reproduction
+      std::function<Genome(EVA*, const std::vector< std::shared_ptr< const Individual > >&)>, // operator
+      std::function<std::shared_ptr<const Individual>(EVA*, const Genome&)> // incubator
     > > reproduction = {};
 
     /// Adaptive learning callback: updates weights based on offspring feedback
@@ -80,8 +86,6 @@ public:
     unsigned int maxNonImprovingSolutionCount = std::numeric_limits<unsigned int>::max(); /// Maximum number of solutions without improvement to be generated before termination
     size_t initiationFrequency = 1; /// Process queue when it contains this many pending individuals
     ThreadConfig threadConfig = {}; /// Default configuration for the threads
-    /// Function to transform a genome into a complete individual
-    std::function<std::shared_ptr< const Individual >(EVA*, const Genome&)> incubate = nullptr;
     /// Function to compute fitness for an individual
     std::function<Fitness(EVA*, const std::shared_ptr< const Individual >&)> evaluate = nullptr;
     std::function<bool(EVA*)> termination = nullptr; /// Custom termination function
@@ -117,16 +121,13 @@ public:
     if ( config.threadConfig.reproduction.empty() ) {
       throw std::logic_error("EvolutionaryAlgorithm: reproduction operator(s) missing");
     }
-    if ( 
-      auto& [selectors, reproduction] = config.threadConfig.reproduction.back(); 
-      selectors.size() > config.minPopulationSize 
+    if (
+      auto& [selectors, reproduction, incubate] = config.threadConfig.reproduction.back();
+      selectors.size() > config.minPopulationSize
     ) {
       throw std::logic_error("EvolutionaryAlgorithm: last reproduction operator must not have more selectors then minimal population size");
     }       
     
-    if ( !config.incubate ) {
-      throw std::logic_error("EvolutionaryAlgorithm: incubator missing");
-    }
     if ( !config.evaluate ) {
       throw std::logic_error("EvolutionaryAlgorithm: evaluator missing");
     }
@@ -524,10 +525,10 @@ protected:
     while ( population.size() < config->minPopulationSize && !terminate ) {
       // update to latest config
       threadConfig = getThreadConfig();
-      // spawn genome
-      auto genome = threadConfig->spawn( this );
-      // incubate into individual
-      auto individual = config->incubate( this, genome );
+      // spawn genome and incubate into individual
+      auto& [spawn, incubate] = threadConfig->spawn;
+      auto genome = spawn( this );
+      auto individual = incubate( this, genome );
       // add individual (main thread will evaluate, no tracking - nothing to learn from spawn)
       add( individual, threadIndex );
     }
@@ -537,7 +538,7 @@ protected:
       auto weightThreshold = randomProbability() * totalWeight;
       double cumulativeWeight = 0.0;
       for ( unsigned int i = 0; i < threadConfig->reproduction.size(); i++ ) {
-        auto& [ selectors, reproduction ] = threadConfig->reproduction[i];
+        auto& [selectors, reproduction, incubate] = threadConfig->reproduction[i];
         // do roulette wheel selection
         cumulativeWeight += weights[i];
         if (cumulativeWeight >= weightThreshold) {
@@ -569,7 +570,7 @@ protected:
           }
 
           if (individuals.size() == selectors.size()) {
-            auto offspring = config->incubate( this, reproduction( this, individuals ) );
+            auto offspring = incubate( this, reproduction( this, individuals ) );
             // Track created offspring with reproducer index
             createdOffspring.emplace_back(offspring, i);
             // Add to main queue (main thread will evaluate)

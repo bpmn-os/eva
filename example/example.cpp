@@ -83,31 +83,29 @@ int main(int argc, char** argv) {
 //    .maxSolutionCount = 100000,
     .maxNonImprovingSolutionCount = 100000,
     .threadConfig = {
-      // use default implementations
-      .spawn = EVA::randomPermutation<Permutation, Values>(length),
+      .spawn = { EVA::randomPermutation<Permutation, Values>(length), EVA::constructor<Permutation, Values>() },
       .reproduction = {
         // Crossover with different selectors
-        { {EVA::binaryTournamentSelection<Permutation, Values>(), EVA::binaryTournamentSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>() },
-        { {EVA::binaryTournamentSelection<Permutation, Values>(), EVA::rankSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>() },
-        { {EVA::binaryTournamentSelection<Permutation, Values>(), EVA::randomSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>() },
-        { {EVA::rankSelection<Permutation, Values>(), EVA::rankSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>() },
-        { {EVA::rankSelection<Permutation, Values>(), EVA::randomSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>() },
-        { {EVA::randomSelection<Permutation, Values>(), EVA::randomSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>() },
+        { {EVA::binaryTournamentSelection<Permutation, Values>(), EVA::binaryTournamentSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>(), EVA::constructor<Permutation, Values>() },
+        { {EVA::binaryTournamentSelection<Permutation, Values>(), EVA::rankSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>(), EVA::constructor<Permutation, Values>() },
+        { {EVA::binaryTournamentSelection<Permutation, Values>(), EVA::randomSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>(), EVA::constructor<Permutation, Values>() },
+        { {EVA::rankSelection<Permutation, Values>(), EVA::rankSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>(), EVA::constructor<Permutation, Values>() },
+        { {EVA::rankSelection<Permutation, Values>(), EVA::randomSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>(), EVA::constructor<Permutation, Values>() },
+        { {EVA::randomSelection<Permutation, Values>(), EVA::randomSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>(), EVA::constructor<Permutation, Values>() },
         // Mutations with different selection strategies
-        { {EVA::binaryTournamentSelection<Permutation, Values>()}, EVA::randomSwap<Permutation, Values>() },
-        { {EVA::rankSelection<Permutation, Values>()}, EVA::randomSwap<Permutation, Values>() },
-        { {EVA::randomSelection<Permutation, Values>()}, EVA::randomSwap<Permutation, Values>() },
-        { {EVA::binaryTournamentSelection<Permutation, Values>()}, EVA::shuffleRandomSegment<Permutation, Values>() },
-        { {EVA::rankSelection<Permutation, Values>()}, EVA::shuffleRandomSegment<Permutation, Values>() },
-        { {EVA::randomSelection<Permutation, Values>()}, EVA::shuffleRandomSegment<Permutation, Values>() },
-        { {EVA::binaryTournamentSelection<Permutation, Values>()}, EVA::swapRandomSegments<Permutation, Values>() },
-        { {EVA::rankSelection<Permutation, Values>()}, EVA::swapRandomSegments<Permutation, Values>() },
-        { {EVA::randomSelection<Permutation, Values>()}, EVA::swapRandomSegments<Permutation, Values>() }
+        { {EVA::binaryTournamentSelection<Permutation, Values>()}, EVA::randomSwap<Permutation, Values>(), EVA::constructor<Permutation, Values>() },
+        { {EVA::rankSelection<Permutation, Values>()}, EVA::randomSwap<Permutation, Values>(), EVA::constructor<Permutation, Values>() },
+        { {EVA::randomSelection<Permutation, Values>()}, EVA::randomSwap<Permutation, Values>(), EVA::constructor<Permutation, Values>() },
+        { {EVA::binaryTournamentSelection<Permutation, Values>()}, EVA::shuffleRandomSegment<Permutation, Values>(), EVA::constructor<Permutation, Values>() },
+        { {EVA::rankSelection<Permutation, Values>()}, EVA::shuffleRandomSegment<Permutation, Values>(), EVA::constructor<Permutation, Values>() },
+        { {EVA::randomSelection<Permutation, Values>()}, EVA::shuffleRandomSegment<Permutation, Values>(), EVA::constructor<Permutation, Values>() },
+        { {EVA::binaryTournamentSelection<Permutation, Values>()}, EVA::swapRandomSegments<Permutation, Values>(), EVA::constructor<Permutation, Values>() },
+        { {EVA::rankSelection<Permutation, Values>()}, EVA::swapRandomSegments<Permutation, Values>(), EVA::constructor<Permutation, Values>() },
+        { {EVA::randomSelection<Permutation, Values>()}, EVA::swapRandomSegments<Permutation, Values>(), EVA::constructor<Permutation, Values>() }
       },
 //      .calibration = EVA::improvementBasedAdaptation<Permutation, Values>()
       .calibration = EVA::statsBasedAdaptation<Permutation, Values>(0.8,0.2)
     },
-    .incubate = EVA::constructor<Permutation, Values>(),
     .evaluate = EVA::fitnessFunction<Permutation, Values>(),
     // create lambda
     .termination = []( [[maybe_unused]] EVA::EvolutionaryAlgorithm< Permutation, Values >* eva) {
