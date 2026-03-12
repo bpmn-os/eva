@@ -25,13 +25,13 @@ ucbBasedAdaptation(double improvementFactor = 0.7, double insertionFactor = 0.2,
 
     // Compute total count across all operators
     unsigned int totalCount = 0;
-    for (auto& [c, ins, imp] : EVA::stats) totalCount += c;
+    for (auto& [operatorCount, operatorInsertions, operatorImprovements] : EVA::stats) totalCount += operatorCount;
 
     auto& [count, insertions, improvements] = EVA::stats[reproducer];
 
     // Exploitation: reward successful operators
-    double insertionRate = (double)(insertions+1) / (count+1);
-    double improvementRate = (double)(improvements+1) / (count+1);
+    double insertionRate = (double)(insertions + 1) / (count + 1);
+    double improvementRate = (double)(improvements + 1) / (count + 1);
 
     // Exploration: boost underused operators (UCB-inspired)
     double explorationTerm = sqrt(log(totalCount + 1) / (count + 1));
