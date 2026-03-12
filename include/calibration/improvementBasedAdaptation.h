@@ -21,9 +21,11 @@ improvementBasedAdaptation() {
     // Thread-local statistics (count, improvements) per operator
     thread_local std::vector<std::tuple<unsigned int, unsigned int>> statistics;
 
-    // Initialize or reset if size changed
-    if (statistics.size() != EVA::weights.size()) {
+    // Reset statistics when calibration is reset
+    if (EVA::resetCalibration) {
+      statistics.clear();
       statistics.resize(EVA::weights.size(), {0, 0});
+      EVA::resetCalibration = false;
     }
 
     auto& [count, improvements] = statistics[reproducer];

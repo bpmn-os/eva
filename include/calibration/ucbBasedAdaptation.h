@@ -29,10 +29,12 @@ ucbBasedAdaptation(double decayFactor = 0.999, double improvementFactor = 0.7, d
     thread_local std::vector<std::tuple<double,double,double>> statistics;
     thread_local double totalCount = 0;
 
-    // Initialize or reset if size changed
-    if (statistics.size() != EVA::weights.size()) {
+    // Reset statistics when calibration is reset
+    if (EVA::resetCalibration) {
+      statistics.clear();
       statistics.resize(EVA::weights.size(), {0, 0, 0});
       totalCount = 0;
+      EVA::resetCalibration = false;
     }
 
     auto& [count, insertions, improvements] = statistics[reproducer];

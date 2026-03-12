@@ -183,6 +183,7 @@ public:
   // Thread-local weights
   static thread_local std::vector<double> weights;
   static thread_local double totalWeight;
+  static thread_local bool resetCalibration;
 
   /// Normalize weights to sum to 1.0 (for roulette wheel selection)
   void normalizeWeights() {
@@ -199,6 +200,7 @@ public:
       weights.push_back( 1.0 / config->reproduction.size() );
     }
     totalWeight = 1.0;
+    resetCalibration = true;
   }
 
   void run() {
@@ -612,6 +614,15 @@ requires (
   std::equality_comparable<Individual>
 )
 thread_local double EvolutionaryAlgorithm<Individual, Genome>::totalWeight = 0.0;
+
+template < typename Individual, typename Genome >
+requires (
+  std::movable<Individual> &&
+  std::movable<Genome> &&
+  std::is_convertible_v<Individual,Genome> &&
+  std::equality_comparable<Individual>
+)
+thread_local bool EvolutionaryAlgorithm<Individual, Genome>::resetCalibration = true;
 
 template < typename Individual, typename Genome >
 requires (
