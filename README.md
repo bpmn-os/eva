@@ -46,7 +46,15 @@ Defines genetic operators per thread (each thread can have different operators):
     - Selectors: vector of selection functions, one per parent `vector<function<Individual(EVA*)>>`
     - Operator: creates offspring `Genome(EVA*, vector<Individual>&)`
     - Incubator: transforms genome to individual `Individual(EVA*, const Genome&)`
-  * `calibration`: Callback invoked to update weights for roulette wheel selection of reproduction operators. 
+  * `calibration`: Callback invoked to update weights for roulette wheel selection of reproduction operators.
+
+### Calibration Strategies
+
+The library provides built-in calibration strategies that manage their own thread-local statistics:
+
+  * `ucbBasedAdaptation`: Balances exploitation (improvement/insertion rates) with exploration (UCB-inspired bonus for underused operators)
+  * `decayingUcbBasedAdaptation`: Same as above but with exponential decay to weight recent outcomes more heavily
+  * `improvementBasedAdaptation`: Simple strategy based only on improvement rate
 
 ## Functionality
 

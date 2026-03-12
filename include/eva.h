@@ -184,9 +184,6 @@ public:
   static thread_local std::vector<double> weights;
   static thread_local double totalWeight;
 
-  // Thread-local stats
-  static thread_local std::vector<std::tuple<unsigned int,unsigned int,unsigned int>> stats; // statistics for each reproducer (count,insertions,improvements)
-
   /// Normalize weights to sum to 1.0 (for roulette wheel selection)
   void normalizeWeights() {
     for ( auto& weight : weights ) {
@@ -202,14 +199,6 @@ public:
       weights.push_back( 1.0 / config->reproduction.size() );
     }
     totalWeight = 1.0;
-  }
-
-  /// Initialize thread-local stats
-  void initializeStats(const std::shared_ptr<ThreadConfig>& config) {
-    stats.clear();
-    for ( unsigned int i = 0; i < config->reproduction.size(); i++ ) {
-      stats.push_back( {0, 0, 0} );
-    }
   }
 
   void run() {
@@ -369,7 +358,6 @@ public:
       std::unique_lock lock(*threadConfigMutex[index-1]);
       threadConfigs[index - 1] = std::make_shared<ThreadConfig>(std::move(config));
       initializeWeights(threadConfigs[index - 1]);  // Always reinitialize weights
-      initializeStats(threadConfigs[index - 1]);  // Always reinitialize stats
       createdOffspring.clear();
     }
     else {
@@ -497,12 +485,6 @@ protected:
         continue;
       }
 
-      // Update stats
-      auto& [count,insertions,improvements] = stats[reproducer];
-      count++;
-      if ( !isUnfit && !isDuplicate ) insertions++;
-      if ( isFittest ) improvements++;      
-
       // Call calibration callback with feedback info
       if (threadConfig->calibration) {
         threadConfig->calibration(this, offspring, reproducer, fitness, isUnfit, isDuplicate, isFittest);
@@ -520,7 +502,6 @@ protected:
 
     auto threadConfig = getThreadConfig();
     initializeWeights(threadConfig);
-    initializeStats(threadConfig);
 
     while ( population.size() < config->minPopulationSize && !terminate ) {
       // update to latest config
@@ -622,15 +603,6 @@ requires (
   std::equality_comparable<Individual>     
 )
 thread_local std::vector<double> EvolutionaryAlgorithm<Individual, Genome>::weights = {};
-
-template < typename Individual, typename Genome >
-requires (
-  std::movable<Individual> &&
-  std::movable<Genome> &&
-  std::is_convertible_v<Individual,Genome> &&                                 
-  std::equality_comparable<Individual>     
-)
-thread_local std::vector<std::tuple<unsigned int,unsigned int,unsigned int>> EvolutionaryAlgorithm<Individual, Genome>::stats = {};
 
 template < typename Individual, typename Genome >
 requires (

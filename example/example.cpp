@@ -104,7 +104,8 @@ int main(int argc, char** argv) {
         { {EVA::rankSelection<Permutation, Values>()}, EVA::swapRandomSegments<Permutation, Values>(), EVA::constructor<Permutation, Values>() },
         { {EVA::randomSelection<Permutation, Values>()}, EVA::swapRandomSegments<Permutation, Values>(), EVA::constructor<Permutation, Values>() }
       },
-//      .calibration = EVA::improvementBasedAdaptation<Permutation, Values>()
+//    .calibration = EVA::improvementBasedAdaptation<Permutation, Values>()
+//      .calibration = EVA::ucbBasedAdaptation<Permutation, Values>()
       .calibration = EVA::decayingUcbBasedAdaptation<Permutation, Values>()
     },
     .evaluate = EVA::fitnessFunction<Permutation, Values>(),

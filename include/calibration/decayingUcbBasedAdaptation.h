@@ -21,7 +21,7 @@ namespace EVA {
  */
 template <typename Individual, typename Genome = Individual>
 std::function<void(EvolutionaryAlgorithm<Individual, Genome>*, const std::shared_ptr<const Individual>&, size_t, const Fitness&, bool, bool, bool)>
-decayingUcbBasedAdaptation(double decayFactor = 0.99, double improvementFactor = 0.7, double insertionFactor = 0.2, double explorationFactor = 0.1) {
+decayingUcbBasedAdaptation(double decayFactor = 0.999, double improvementFactor = 0.7, double insertionFactor = 0.2, double explorationFactor = 0.1) {
   return [decayFactor, improvementFactor, insertionFactor, explorationFactor]([[maybe_unused]] EvolutionaryAlgorithm<Individual, Genome>* eva, [[maybe_unused]] const std::shared_ptr<const Individual>& offspring, size_t reproducer, [[maybe_unused]] const Fitness& fitness, bool isUnfit, bool isDuplicate, bool isFittest) {
     using EVA = EvolutionaryAlgorithm<Individual, Genome>;
 
@@ -30,8 +30,8 @@ decayingUcbBasedAdaptation(double decayFactor = 0.99, double improvementFactor =
     thread_local double totalDecayedCount = 0;
 
     // Initialize or reset if size changed
-    if (decayedStatistics.size() != EVA::stats.size()) {
-      decayedStatistics.resize(EVA::stats.size(), {0, 0, 0});
+    if (decayedStatistics.size() != EVA::weights.size()) {
+      decayedStatistics.resize(EVA::weights.size(), {0, 0, 0});
       totalDecayedCount = 0;
     }
 

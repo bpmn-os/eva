@@ -15,15 +15,27 @@ namespace EVA {
 template <typename Individual, typename Genome = Individual>
 std::function<void(EvolutionaryAlgorithm<Individual, Genome>*, const std::shared_ptr<const Individual>&, size_t, const Fitness&, bool, bool, bool)>
 improvementBasedAdaptation() {
-  return []([[maybe_unused]] EvolutionaryAlgorithm<Individual, Genome>* eva, [[maybe_unused]] const std::shared_ptr<const Individual>& offspring, size_t reproducer, [[maybe_unused]] const Fitness& fitness, [[maybe_unused]] bool isUnfit, [[maybe_unused]] bool isDuplicate, [[maybe_unused]] bool isFittest) {
+  return []([[maybe_unused]] EvolutionaryAlgorithm<Individual, Genome>* eva, [[maybe_unused]] const std::shared_ptr<const Individual>& offspring, size_t reproducer, [[maybe_unused]] const Fitness& fitness, [[maybe_unused]] bool isUnfit, [[maybe_unused]] bool isDuplicate, bool isFittest) {
     using EVA = EvolutionaryAlgorithm<Individual, Genome>;
-    // Update weight for this reproducer based on accumulated stats
-    auto& [count, insertions, improvements] = EVA::stats[reproducer];
+
+    // Thread-local statistics (count, improvements) per operator
+    thread_local std::vector<std::tuple<unsigned int, unsigned int>> statistics;
+
+    // Initialize or reset if size changed
+    if (statistics.size() != EVA::weights.size()) {
+      statistics.resize(EVA::weights.size(), {0, 0});
+    }
+
+    auto& [count, improvements] = statistics[reproducer];
+
+    // Update statistics
+    count++;
+    if (isFittest) improvements++;
 
     // Calculate improvement rate
-    double improvementRate = (double)(improvements+1) / (count+1);
+    double improvementRate = (double)(improvements + 1) / (count + 1);
 
-    // Weighted combination
+    // Update weight
     double updatedWeight = improvementRate;
     EVA::totalWeight += updatedWeight - EVA::weights[reproducer];
     EVA::weights[reproducer] = updatedWeight;
