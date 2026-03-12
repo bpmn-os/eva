@@ -52,8 +52,7 @@ Defines genetic operators per thread (each thread can have different operators):
 
 The library provides built-in calibration strategies that manage their own thread-local statistics:
 
-  * `ucbBasedAdaptation`: Balances exploitation (improvement/insertion rates) with exploration (UCB-inspired bonus for underused operators)
-  * `decayingUcbBasedAdaptation`: Same as above but with exponential decay to weight recent outcomes more heavily
+  * `ucbBasedAdaptation`: Balances exploitation (improvement/insertion rates) with exploration (UCB-inspired bonus for underused operators). Uses decay factor to weight recent outcomes more heavily (can be set to 1.0 to disable decay).
   * `improvementBasedAdaptation`: Simple strategy based only on improvement rate
 
 ## Functionality

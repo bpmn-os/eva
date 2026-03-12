@@ -11,7 +11,6 @@
 #include "../include/spawn/randomPermutation.h"
 #include "../include/calibration/improvementBasedAdaptation.h"
 #include "../include/calibration/ucbBasedAdaptation.h"
-#include "../include/calibration/decayingUcbBasedAdaptation.h"
 
 #include <iostream>
 
@@ -105,8 +104,7 @@ int main(int argc, char** argv) {
         { {EVA::randomSelection<Permutation, Values>()}, EVA::swapRandomSegments<Permutation, Values>(), EVA::constructor<Permutation, Values>() }
       },
 //    .calibration = EVA::improvementBasedAdaptation<Permutation, Values>()
-//      .calibration = EVA::ucbBasedAdaptation<Permutation, Values>()
-      .calibration = EVA::decayingUcbBasedAdaptation<Permutation, Values>()
+      .calibration = EVA::ucbBasedAdaptation<Permutation, Values>()
     },
     .evaluate = EVA::fitnessFunction<Permutation, Values>(),
     // create lambda
