@@ -11,6 +11,7 @@
 #include <incubator/constructor.h>
 #include <evaluator/fitnessFunction.h>
 #include <calibration/improvementBasedAdaptation.h>
+#include <calibration/ucbBasedAdaptation.h>
 
 // Test problem: sort a permutation of integers
 // Genome type represents the genetic material (vector of integers)

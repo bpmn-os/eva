@@ -7,15 +7,15 @@ TEST_CASE("Sorting", "[sorting]") {
     .maxSolutionCount = 50,         // Stop after 50 solutions generated
     .initiationFrequency = 1,       // Process each individual immediately for accurate termination
     .threadConfig = {
-      .spawn = EVA::randomPermutation<Permutation, Values>(5),  // Create random 5-element permutations
+      .spawn = {EVA::randomPermutation<Permutation, Values>(5), EVA::constructor<Permutation, Values>()},
       .reproduction = {
         {
-          {EVA::binaryTournamentSelection<Permutation, Values>(), EVA::binaryTournamentSelection<Permutation, Values>()},  // 2 parents
-          EVA::orderedCrossover<Permutation, Values>()          // Crossover operator
+          {EVA::binaryTournamentSelection<Permutation, Values>(), EVA::binaryTournamentSelection<Permutation, Values>()},
+          EVA::orderedCrossover<Permutation, Values>(),
+          EVA::constructor<Permutation, Values>()
         },
       },
     },
-    .incubate = EVA::constructor<Permutation, Values>(),       // Genome → Individual
     .evaluate = EVA::fitnessFunction<Permutation, Values>()    // Use Individual::getFitness()
   });
 

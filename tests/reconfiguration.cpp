@@ -1,16 +1,16 @@
 TEST_CASE("Reconfiguration before run", "[reconfiguration]") {
   EVA::EvolutionaryAlgorithm<Permutation, Values>::ThreadConfig defaultConfig = {
-    .spawn = EVA::randomPermutation<Permutation, Values>(5),
+    .spawn = {EVA::randomPermutation<Permutation, Values>(5), EVA::constructor<Permutation, Values>()},
     .reproduction = {
-      { {EVA::binaryTournamentSelection<Permutation, Values>(), EVA::binaryTournamentSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>() },
-      { {EVA::randomSelection<Permutation, Values>(), EVA::randomSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>() }
+      { {EVA::binaryTournamentSelection<Permutation, Values>(), EVA::binaryTournamentSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>(), EVA::constructor<Permutation, Values>() },
+      { {EVA::randomSelection<Permutation, Values>(), EVA::randomSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>(), EVA::constructor<Permutation, Values>() }
     }
   };
 
   EVA::EvolutionaryAlgorithm<Permutation, Values>::ThreadConfig alternativeConfig = {
-    .spawn = EVA::randomPermutation<Permutation, Values>(5),
+    .spawn = {EVA::randomPermutation<Permutation, Values>(5), EVA::constructor<Permutation, Values>()},
     .reproduction = {
-      { {EVA::randomSelection<Permutation, Values>()}, EVA::randomSwap<Permutation, Values>() }
+      { {EVA::randomSelection<Permutation, Values>()}, EVA::randomSwap<Permutation, Values>(), EVA::constructor<Permutation, Values>() }
     }
   };
 
@@ -21,7 +21,6 @@ TEST_CASE("Reconfiguration before run", "[reconfiguration]") {
     .maxSolutionCount = 100,
     .initiationFrequency = 1,
     .threadConfig = defaultConfig,
-    .incubate = EVA::constructor<Permutation, Values>(),
     .evaluate = EVA::fitnessFunction<Permutation, Values>()
   });
 
@@ -37,20 +36,23 @@ TEST_CASE("Reconfiguration before run", "[reconfiguration]") {
 
 TEST_CASE("Self-reconfiguration during run", "[reconfiguration]") {
   EVA::EvolutionaryAlgorithm<Permutation, Values>::ThreadConfig defaultConfig = {
-    .spawn = EVA::randomPermutation<Permutation, Values>(5),
+    .spawn = {EVA::randomPermutation<Permutation, Values>(5), EVA::constructor<Permutation, Values>()},
     .reproduction = {
-      { {EVA::binaryTournamentSelection<Permutation, Values>(), EVA::binaryTournamentSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>() },
-      { {EVA::randomSelection<Permutation, Values>(), EVA::randomSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>() }
+      { {EVA::binaryTournamentSelection<Permutation, Values>(), EVA::binaryTournamentSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>(), EVA::constructor<Permutation, Values>() },
+      { {EVA::randomSelection<Permutation, Values>(), EVA::randomSelection<Permutation, Values>()}, EVA::orderedCrossover<Permutation, Values>(), EVA::constructor<Permutation, Values>() }
     }
   };
 
   EVA::EvolutionaryAlgorithm<Permutation, Values>::ThreadConfig alternativeConfig = {
-    .spawn = [&defaultConfig](auto* eva) -> Values {
-      eva->setThreadConfig(defaultConfig);  // Reconfigure to defaultConfig
-      return EVA::randomPermutation<Permutation, Values>(5)(eva);
+    .spawn = {
+      [&defaultConfig](auto* eva) -> Values {
+        eva->setThreadConfig(defaultConfig);  // Reconfigure to defaultConfig
+        return EVA::randomPermutation<Permutation, Values>(5)(eva);
+      },
+      EVA::constructor<Permutation, Values>()
     },
     .reproduction = {
-      { {EVA::randomSelection<Permutation, Values>()}, EVA::randomSwap<Permutation, Values>() }
+      { {EVA::randomSelection<Permutation, Values>()}, EVA::randomSwap<Permutation, Values>(), EVA::constructor<Permutation, Values>() }
     }
   };
 
@@ -61,7 +63,6 @@ TEST_CASE("Self-reconfiguration during run", "[reconfiguration]") {
     .maxSolutionCount = 100,
     .initiationFrequency = 1,
     .threadConfig = defaultConfig,
-    .incubate = EVA::constructor<Permutation, Values>(),
     .evaluate = EVA::fitnessFunction<Permutation, Values>()
   });
 
